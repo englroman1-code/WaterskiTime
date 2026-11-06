@@ -1,0 +1,73 @@
+# Logging-Design
+
+## Log-Dateien
+1. current.log
+   - Format: [Timestamp] [LogLevel] [Component] Message | Context
+   - Inhalt: 
+     * Rennerstellungen/-änderungen
+     * Benutzeraktionen
+     * Timer-Ereignisse
+     * Systemstatus-Übergänge
+   - Retention: Wird bei jedem Neustart archiviert wenn nicht zur Wiederherstellung verwendet
+
+2. error.log  
+   - Format: [Timestamp] [ERROR] [Component] Message | Stacktrace | Context
+   - Inhalt:
+     * Unbehandelte Exceptions
+     * Kritische Systemfehler
+     * Dateninkonsistenzen
+   - Retention: Rotiert wöchentlich
+
+## App-Start Prozess
+
+### 1. Log Recovery Check
+```python
+if os.path.exists('current.log'):
+    user_choice = ask_yes_no("Vorhandenes current.log gefunden. Wiederherstellung versuchen?")
+    if user_choice == YES:
+        load_race_state('current.log')
+        log_event("System", "Recovery from existing log")
+    else:
+        archive_name = f"current_{datetime.now().strftime('%Y%m%d_%H%M')}.log"
+        os.rename('current.log', archive_name)
+        create_new_log('current.log')
+        log_event("System", f"New log started. Old log archived as {archive_name}")
+else:
+    create_new_log('current.log')
+
+def create_new_log(filename):
+    with open(filename, 'w') as f:
+        f.write(f"Log created at {datetime.now()}\n")
+        f.write("System | INIT | Application started\n")
+```
+
+### 2. Excel Datei Check
+```python
+excel_files = glob.glob('*.xls*')
+
+if len(excel_files) == 1:
+    if validate_excel(excel_files[0]):
+        load_excel(excel_files[0])
+    else:
+        show_error("Ungültige Excel-Datei")
+elif len(excel_files) > 1:
+    selected_file = show_file_selector("Bitte Excel-Datei auswählen", excel_files)
+    if selected_file:
+        load_excel(selected_file)
+else:
+    show_warning("Keine Excel-Dateien gefunden")
+```
+
+## Logging-Interface
+```python
+def log_event(component, message, level="INFO", context=None):
+    entry = f"{datetime.now()} [{level}] [{component}] {message}"
+    if context:
+        entry += f" | {json.dumps(context)}"
+    
+    with open('current.log', 'a') as f:
+        f.write(entry + "\n")
+    
+    if level in ["ERROR", "CRITICAL"]:
+        with open('error.log', 'a') as f:
+            f.write(entry + "\n")

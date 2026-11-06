@@ -1,0 +1,71 @@
+# 02 - Technologie Stack
+
+## Ziel: 
+Festlegung der verwendeten Technologien und deren Versionen für das Zeitnehmungssystem
+
+## Komponenten des Tech-Stacks:
+
+### 1. Python 3.11+
+- **Grund**: Stabilität, Performance-Verbesserungen, Typ-Hinting
+- **Verwendung**: Kernlogik, Excel-Integration, GUI
+- **Version**: Mindestens 3.11 (Pattern Matching, bessere Fehlermeldungen)
+
+### 2. GUI-Bibliothek: CustomTkinter 5.2+
+- **Vorteile**: 
+  - Moderne UI-Komponenten
+  - Dunkelmodus-Unterstützung
+  - Einfache Integration
+- **Installation**: `pip install customtkinter`
+
+### 3. Excel-Integration: OpenPyXL 3.1+
+- **Funktionen**:
+  - Lesen/Schreiben von .xlsx-Dateien
+  - Formatierungserhaltung
+  - Diagramm-Unterstützung
+- **Installation**: `pip install openpyxl`
+
+### 4. Tastatur-Input: Keyboard 0.13+
+- **Features**:
+  - Systemweite Hotkey-Erkennung
+  - Niedrige Latenz (< 10ms)
+  - Unabhängig vom Fokus des Fensters
+
+### 5. Deployment: PyInstaller 6.2+
+- **Vorteile**:
+  - Erstellung von single-file Executables
+  - Keine Python-Installation beim Kunden nötig
+  - Windows-Support
+
+### 6. Protokollierung: Loguru 0.7+
+- **Vorteile**:
+  - Einfache Konfiguration
+  - Automatische Rotation der Logdateien
+  - Farbige Ausgabe
+
+## Abhängigkeitsmanagement:
+- **requirements.txt** mit festen Versionen:
+  ```
+  customtkinter==5.2.1
+  openpyxl==3.1.2
+  keyboard==0.13.5
+  pyinstaller==6.2.0
+  loguru==0.7.0
+  ```
+
+## Architekturprinzipien:
+1. **Trennung von Daten und Logik**:
+   - Konfiguration in Excel
+   - App-Logik in Python
+2. **Ereignisbasierte Verarbeitung**:
+   - Klare Zustandsmaschine für Rennphasen
+3. **Offline-First**:
+   - Keine Netzwerkabhängigkeiten
+4. **Robuste Protokollierung**:
+   - TXT-Blackbox für Audit-Trail
+
+## Akzeptanzkriterien:
+- [ ] Alle Bibliotheken installieren sich ohne Konflikte
+- [ ] GUI-Komponenten rendern korrekt auf verschiedenen Windows-Versionen
+- [ ] Excel-Dateien werden ohne Excel-Installation gelesen/geschrieben
+- [ ] Hotkeys funktionieren systemweit
+- [ ] EXE-Datei startet auf frischer Windows-Installation

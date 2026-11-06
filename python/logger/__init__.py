@@ -1,0 +1,1 @@
+# Waterski Racing Timing System - Logging (Blackbox, Event-Log, Error-Log)

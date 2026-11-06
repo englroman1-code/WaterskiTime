@@ -1,0 +1,83 @@
+# 06 - Teststrategie und Qualitätssicherung
+
+## Ziel: 
+Sicherstellung der Systemstabilität und korrekten Funktionsweise unter realen Wettkampfbedingungen
+
+## Testkategorien:
+
+### 1. Komponententests (Unit Tests):
+- Testframework: pytest
+- Abdeckung: Mindestens 80% der Kernlogik
+- Beispieltest für Rundenberechnung:
+  ```python
+  def test_rundenberechnung():
+      # Testdaten vorbereiten
+      events = [
+          Event(datetime(2026,6,17,10,0,0), 1, "START"),
+          Event(datetime(2026,6,17,10,0,30), 1, "PASSAGE"),
+          Event(datetime(2026,6,17,10,1,15), 1, "PASSAGE")
+      ]
+      
+      # Berechnung durchführen
+      ergebnis = berechne_runden(1, events)
+      
+      # Assertions
+      assert ergebnis["runden"] == 2
+      assert ergebnis["gesamtzeit"] == 75.0
+      assert ergebnis["schnellste_runde"] == 30.0
+  ```
+
+### 2. Integrationstests:
+- Excel ↔ Python Datenaustausch
+- Ereignisverarbeitungskette
+- GUI ↔ Logik Interaktion
+
+### 3. Lasttests:
+- Simulierte Dauerbelastung (8h kontinuierlicher Betrieb)
+- 1000+ Ereignisse/Minute
+- Speicherverbrauchsüberwachung
+
+### 4. Benutzertests unter Realbedingungen:
+- Test auf unterschiedlichen Hardwarekonfigurationen
+- Bediener-Training mit Zeitdruck-Simulation
+- Test bei verschiedenen Lichtverhältnissen
+
+## Testautomatisierung:
+
+### Continuous Integration Pipeline:
+```mermaid
+graph LR
+    A[Code Commit] --> B[Unit Tests]
+    B --> C[Integration Tests]
+    C --> D[EXE Build]
+    D --> E[Systemtests]
+    E --> F[Deploy Testversion]
+```
+
+### Testfälle (Beispiele):
+
+| **ID** | **Beschreibung**                     | **Erwartetes Ergebnis**               |
+|--------|--------------------------------------|----------------------------------------|
+| TC-01  | Doppeleingabe innerhalb Sperrzeit    | Zweite Eingabe als INVALID markiert    |
+| TC-02  | Rennstart ohne Konfiguration         | Fehlermeldung angezeigt                |
+| TC-03  | Netzwerkausfall während Betrieb      | Kein Einfluss, Betrieb normal         |
+| TC-04  | Excel-Datei während Zugriff ändern   | Fehlerprotokollierung, Datenkonsistenz |
+| TC-05  | Tastendruck bei CPU-Last 100%        | Eingabe innerhalb 100ms verarbeitet    |
+
+## Testdatenmanagement:
+- Referenz-Excel-Dateien für verschiedene Szenarien
+- Automatisierte Generierung von Testrennen
+- Fuzzing: Zufällige Tastatureingaben über Keyboard-Library
+
+## Fehlerverfolgung:
+- Integration mit GitHub Issues
+- Automatisierte Crash-Reports
+- Reproduktionsanleitung für jeden gemeldeten Fehler
+
+## Akzeptanzkriterien:
+- [ ] Alle Unit Tests erfolgreich
+- [ ] Keine Memory Leaks im 8h-Dauerbetrieb
+- [ ] 100% Abdeckung der Rennlogik durch Tests
+- [ ] Maximal 1 kritischer Fehler pro 100 Rennstunden
+- [ ] Benutzerzufriedenheit ≥ 4/5 in Bedienertests
+- [ ] Wiederherstellung nach Absturz innerhalb 30s möglich

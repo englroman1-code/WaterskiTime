@@ -1,0 +1,487 @@
+Gesamteindruck
+
+Desktop-Anwendung für Zeitmessung im Wasserski-Racing.
+
+Fenstertitel: „Wasserski-Racing Timing System v1.0“
+Dunkles High-Contrast-Theme
+Farbpalette:
+Hintergrund: Schwarz bis Dunkelgrau
+Panels: Dunkle Glas-/Metallic-Optik
+Akzentfarben:
+Grün = aktiv, positiv, Neustart, Führender
+Rot = Rennstart, Warnungen, Countdown
+Blau = Fortschrittsbalken
+Gelb/Orange = Status „wartend“
+Weiße Schrift für Standardtexte
+
+Stilrichtung:
+
+Modernes Dashboard
+Leichte Glow-Effekte
+Abgerundete Container
+Dünne Rahmen
+Dezente Transparenz/Gradienten
+Hohe Informationsdichte
+Oberste Ebene
+
+Die Anwendung besteht aus vier horizontalen Bereichen:
+
+Kopfbereich (Titel + Logo)
+Oberes Dashboard (Renninformationen + Countdown)
+Mittlerer Hauptbereich (Tabelle + rechte Seitenleiste)
+Unterer Bereich (Logs + Status/Steuerung)
+Bereich 1: Kopfbereich
+
+Position:
+
+Oben über die gesamte Fensterbreite
+
+Elemente:
+
+Haupttitel links
+
+Große Überschrift:
+
+Zeitnehmungs-System Wasserski-Racing
+
+Eigenschaften:
+
+Sehr große Schrift
+Weiß
+Fett
+Linksbündig
+Logo- und Branding-Bereich rechts
+
+Position:
+
+Oben rechts
+
+Bestandteile:
+
+Logo
+Rundes Symbol
+Türkis/Blau/Grün
+Firmenname
+EDV Engl Roman
+Website
+www.EDVEnglRoman.de
+
+Hierarchie:
+
+Logo
+→ Firmenname
+→ Website
+
+Bereich 2: Oberes Dashboard
+
+Zwei große nebeneinanderliegende Panels.
+
+Linkes Panel: Renninformationen
+
+Titel:
+
+Renninformationen
+
+Container:
+
+Dunkler Rahmen
+Abgerundete Ecken
+
+Inhalt als vertikale Liste:
+
+Event
+
+Label:
+
+Event:
+
+Wert:
+
+Österreichische Meisterschaften Ybbs 2026
+Datum
+
+Label:
+
+Datum:
+
+Wert:
+
+17.06.2026
+Rennen
+
+Label:
+
+Rennen:
+
+Wert:
+
+2 (U18 Open)
+Länge R1
+
+Label:
+
+Länge R1:
+
+Wert:
+
+1800m
+Länge R2+
+
+Label:
+
+Länge R2+:
+
+Wert:
+
+1600m
+
+Layout:
+
+Zweispaltig
+
+Label	Wert
+Event	...
+Datum	...
+Rennen	...
+Länge R1	...
+Länge R2+	...
+Rechtes Panel: Countdown-Anzeige
+
+Titel:
+
+Countdown-Anzeige
+
+Unterteilt in zwei gleich große Bereiche.
+
+Linke Countdown-Kachel
+Überschrift
+VORSTART:
+Zeitwert
+00:03:15
+
+Eigenschaften:
+
+Groß
+Rot
+Fortschrittsbalken
+
+Darunter:
+
+Horizontal
+Blau gefüllt
+Teilweise gefüllt
+Button
+
+Beschriftung:
+
+RENNSTART
+
+Eigenschaften:
+
+Sehr breit
+Rot
+Weiße Schrift
+Rechte Countdown-Kachel
+Überschrift
+VERBLEIBENDE ZEIT:
+Zeitwert
+32:45
+
+Eigenschaften:
+
+Groß
+Grün
+Fortschrittsbalken
+Grün
+Horizontal
+Button
+
+Beschriftung:
+
+RENNSTART
+
+Tatsächliche Funktion vermutlich Neustart/Reset.
+
+Eigenschaften:
+
+Breit
+Grün
+Weiße Schrift
+Tooltip
+
+Über dem linken Button sichtbar:
+
+Start Countdown/Start Rennen
+
+Schwarzer Tooltip mit heller Schrift.
+
+Bereich 3: Hauptbereich
+
+Der größte Bereich des Programms.
+
+Besteht aus:
+
+großer Tabelle links
+Hotkey-Panel rechts
+Linkes Hauptpanel: Live-Tabelle (Rangliste)
+
+Titel:
+
+Live-Tabelle (Rangliste)
+
+Container:
+
+Nimmt etwa 75–80 % der Breite ein
+Tabellenstruktur
+
+Spalten:
+
+Spalte	Bedeutung
+#	Platzierung
+Runner	Fahrer
+Klasse	Rennklasse
+Boot	Boot
+Runden	Anzahl Runden
+Letzte Runde	Letzte Rundenzeit
+Gesamtzeit	Gesamtzeit
+Sichtbare Zeilen
+
+Beispiel:
+
+Zeile 1
+#1
+S. Huber
+U18
+A
+8
+02:14.2
+19:15.8
+
+Besonderheiten:
+
+Grün hervorgehoben
+Leuchtender Rahmen
+Aktueller Führender
+Weitere Fahrer
+
+Beispiele:
+
+M. Berger
+A. Sterner
+G. Hocker
+M. Herger
+Strafanzeige
+
+In rechten Zellen einzelner Zeilen:
+
+Roter Hinweis:
+
+Boot C: SPERRZEIT (35s)
+
+Darstellung:
+
+Rot
+Rechtsbündig
+Scrollbar
+
+Vertikale Scrollbar:
+
+Rechts innerhalb der Tabelle
+Dunkel
+Sichtbar
+Rechtes Seitenpanel: Tastaturbedienung
+
+Titel:
+
+Tastaturbedienung (Hotkeys)
+Hotkey-Liste
+
+Textblock:
+
+Boot A: 1
+Boot B: 2
+Boot C: 3
+Virtuelle Tastatur
+
+Raster aus Buttons.
+
+Layout:
+
+Erste Reihe
+A B C D E F G H I
+Zweite Reihe
+K L M N O P Q R T
+Dritte Reihe
+U V W [Leertaste] Y Z
+
+Leertaste:
+
+Deutlich breiter
+Zahlenblock
+
+Obere Reihe:
+
+1 2 3 4 5
+
+Untere Reihe:
+
+6 7 8 9 0
+
+Eigenschaften:
+
+Quadratische Buttons
+Dunkelgrau
+Helle Beschriftung
+Bereich 4: Untere Zone
+
+Zweiteilige Struktur.
+
+Linkes Panel: Ereignis-Feed (Logs)
+
+Titel:
+
+Ereignis-Feed (Logs)
+
+Großer scrollbarer Textbereich.
+
+Logeinträge
+
+Format:
+
+HH:MM:SS Beschreibung
+
+Beispiele:
+
+14:32:01 Rennen 2 Gestartet
+14:34:15 Boot A R1 Passage (02:14)
+14:34:18 Boot B R1 Passage (02:17)
+14:36:29 Boot A R2 Passage (02:14)
+14:36:34 Boot B R2 Passage (02:16)
+14:36:45 MANUELLE KORREKTUR +1 Boot A
+
+Eigenschaften:
+
+Monospaced-Anmutung
+Chronologische Reihenfolge
+Scrollbar rechts
+Rechtes unteres Panel
+
+Vertikal in zwei Bereiche geteilt.
+
+Oberer Bereich: Rennende-Status
+
+Titel:
+
+Rennende-Status
+Status Zeile 1
+Klasse U18:
+WARTEND
+
+Statusfarbe:
+
+Gelb
+Status Zeile 2
+Klasse Damen:
+WARTEND
+
+Statusfarbe:
+
+Gelb
+Unterer Bereich: Manuelle Rundenkorrektur
+
+Großer Button-/Eingabebereich.
+
+Überschrift
+Manuell +1 Runde
+
+Eigenschaften:
+
+Große Schrift
+Zentriert
+Dropdown-Feld
+
+Auswahl:
+
+Boot A
+
+Komponente:
+
+Kombinationsfeld (ComboBox)
+
+Funktion:
+
+Auswahl des Boots für die manuelle Rundenerhöhung
+Fußbereich
+
+Ganz unten über die Fensterbreite.
+
+Linke Statusanzeige
+
+Text:
+
+Excel data for active racers:
+Lokal in Windows
+
+Kleine Statusschrift.
+
+Zentriertes Branding
+
+Logo:
+
+EDV Engl
+Engl Roman
+
+Mit Firmenlogo.
+
+Rechte Statusanzeige
+
+Text:
+
+EDV Engl Roman
+info@EDVEnglRoman.de
+
+Rechtsbündig.
+
+Visuelle Hierarchie
+
+Priorität 1 (größte Aufmerksamkeit)
+
+Haupttitel
+Countdown-Zeiten
+Roter/Grüner Rennstart-Button
+
+Priorität 2
+
+Live-Rangliste
+Führender Fahrer (grün markiert)
+
+Priorität 3
+
+Logs
+Renninformationen
+
+Priorität 4
+
+Hotkey-Tastatur
+Statusanzeigen
+Branding/Fußzeile
+Layout-Raster (vereinfacht)
+┌──────────────────────────────────────────────────────────────┐
+│ Titel                                   Logo/Branding       │
+├───────────────────┬─────────────────────────────────────────┤
+│ Renninformationen │ Countdown-Anzeige                       │
+├───────────────────┴─────────────────────────────────────────┤
+│                                                         │   │
+│               Live-Tabelle (Rangliste)                  │   │
+│                                                         │   │
+│                                                         │   │
+│                                                         │   │
+│                                                         │HK │
+│                                                         │   │
+├─────────────────────────────────────────────────────────┤   │
+│ Ereignis-Feed (Logs)                                    │   │
+│                                                         ├───┤
+│                                                         │Status
+│                                                         ├───┤
+│                                                         │+1R │
+└─────────────────────────────────────────────────────────┴───┘

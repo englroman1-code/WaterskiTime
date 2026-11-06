@@ -1,0 +1,52 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Excel-Dateien (nie versionieren)
+*.xlsx
+*.xlsm
+*.xls
+
+# Logs
+*.log
+logs/
+
+# Laufzeit-/Testartefakte (nicht versionieren)
+Ergebnis_*.json
+RESULT_*.json
+IMPORT*.json
+Gemini_Generated_Image_*.png
+*.docx
+
+# KI-Zwischenprodukte / alte Dokumentversionen
+_BOTBRAIN/
+old/
+
+# Lokale OpenWork-Konfiguration (absolute Pfade)
+.opencode/openwork.json
+
+# Große Tool-Binaries (Script bleibt versioniert)
+TOOLS/*.exe
+
+# PyInstaller
+*.manifest
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Secrets
+AI_Usage.md
+
+# OpenWork
+.opencode/node_modules/

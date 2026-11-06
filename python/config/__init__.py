@@ -1,0 +1,1 @@
+# Waterski Racing Timing System - Configuration & Constants

@@ -1,0 +1,103 @@
+# 03 - Datenfluss und Systemintegration
+
+## Ziel: 
+Beschreibung des vollständigen Datenflusses zwischen Excel, Python-Applikation und Protokollierungssystem
+
+## Datenquellen und -senken:
+
+1. **Excel-Konfiguration** (race_config.xlsx)
+   - Renndaten (Eventtitel, Datum, Streckenlängen)
+   - Starterliste (Boot-Key, Boot-Name, Klasse)
+   - Rennparameter (Renndauer, Vorlaufzeit, Startlinien)
+
+2. **Python-Applikation**
+   - Zustandsmaschine (Vorstart, Aktiv, Rennende)
+   - Ereignisverarbeitung (Tastendrücke mit Zeitstempel)
+   - Rundenberechnung
+
+3. **Protokollierungssysteme**
+   - Blackbox-Log (rohe Tastendrücke in TXT)
+   - Excel-Ergebnisprotokoll (strukturierte Ereignisse)
+   - Error-Log (Applikationsfehler)
+
+## Datenflussdiagramm:
+
+```
+[Excel Konfig] --> (Einlesen bei Start) --> [Python App]
+                     |
+                     V
+               [GUI Anzeige]
+                     |
+                     V
+[Benutzereingabe] --> [Ereignisverarbeitung]
+                     |                  |
+                     |                  V
+                     |           [Rundenberechnung]
+                     |                  |
+                     V                  V
+               [Blackbox-Log]    [Excel-Ergebnis]
+                     |
+                     V
+               [Fehlerprotokoll]
+```
+
+## Schritt-für-Schritt Datenverarbeitung:
+
+1. **Initialisierung**:
+   - App lädt race_config.xlsx beim Start
+   - Validierung aller Pflichtfelder
+   - Mapping: Tasten (A-Z) → Boote
+
+2. **Rennstart**:
+   - Countdown startet (Vorlaufzeit)
+   - Startlinien werden mit Offset aktiviert
+
+3. **Ereigniserfassung**:
+   ```python
+   def on_key_press(event):
+       boot = key_mapping[event.name]
+       zeitstempel = datetime.now()
+       # Schreiben in Blackbox
+       log_blackbox(f"{zeitstempel} - TASTE: {event.name}")
+       # Verarbeitung in Zustandsmaschine
+       process_event(boot, zeitstempel)
+   ```
+
+4. **Rundenberechnung**:
+   - Erste Runde: Startzeit → erste Passage
+   - Folge-Runden: Differenz zwischen Passagen
+   - Gesamtzeit: Summe aller Runden
+
+5. **Protokollierung**:
+   - TXT-Blackbox: Append-only mit Microsekunden
+   - Excel-Protokoll: Strukturierte Ereignistabelle
+   - Automatische Dateirotation bei >10MB
+
+6. **Rennende**:
+   - Klassenweise Abschlusslogik
+   - Export der Ergebnisse in Excel
+   - System zurücksetzen für nächstes Rennen
+
+## Schnittstellenbeschreibung:
+
+### Excel → Python
+- **Dateiformat**: .xlsx
+- **Felder**:
+  - `Renndaten!Event-Titel` (String)
+  - `Starter!Boot-Key` (Char A-Z)
+  - `Rennkonfiguration!Renndauer` (Integer Minuten)
+
+### Python → Protokolle
+- **Blackbox**:
+  Format: `[YYYY-MM-DD HH:MM:SS,mmm] - TASTE: 'X' - STATUS: VALID`
+- **Excel-Ergebnis**:
+  | Boot | Runde | Zeitstempel          | Ereignistyp |
+  |------|-------|----------------------|-------------|
+  | 1    | 1     | 2026-06-17 14:35:02 | Start       |
+
+## Akzeptanzkriterien:
+- [ ] Konfiguration wird bei App-Start fehlerfrei geladen
+- [ ] Tastendrücke werden innerhalb 100ms verarbeitet
+- [ ] Blackbox-Log enthält jeden Tastendruck mit Mikrosekunden
+- [ ] Excel-Ergebnisdatei wird nach Rennende korrekt generiert
+- [ ] Systemzustand wird nach Rennende vollständig zurückgesetzt

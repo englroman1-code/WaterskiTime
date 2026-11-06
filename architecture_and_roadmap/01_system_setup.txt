@@ -1,0 +1,60 @@
+# 01 - System Setup und Entwicklungsumgebung
+
+## Ziel: 
+Einrichtung einer funktionierenden Entwicklungsumgebung für das Zeitnehmungssystem
+
+## Voraussetzungen:
+- Windows 10/11
+- Python 3.11+ installiert
+- Microsoft Excel 2019 oder neuer
+- 500 MB freier Festplattenspeicher
+
+## Schritt-für-Schritt Anleitung:
+
+1. Python Installation
+   - Download von python.org
+   - Bei Installation "Add to PATH" aktivieren
+   - Überprüfung mit: `python --version`
+
+2. Projektordner erstellen
+   ```
+   mkdir waterski_timing
+   cd waterski_timing
+   ```
+
+3. Virtuelle Umgebung anlegen
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\activate
+   ```
+
+4. Abhängigkeiten installieren
+   ```bash
+   pip install openpyxl==3.1.2 
+   pip install keyboard==0.13.5
+   pip install customtkinter==5.2.1
+   pip install pyinstaller==6.2.0
+   ```
+
+5. Projektstruktur anlegen
+   ```
+   /python
+      /core
+         timer_logic.py
+         excel_handler.py
+      /config
+         race_config.xlsx
+      /build
+      /logs
+   ```
+
+6. EXE-Kompilierung
+   ```bash
+   pyinstaller --onefile --noconsole python/core/main.py --distpath build
+   ```
+
+## Akzeptanzkriterien:
+- [ ] Alle pip-Pakete erfolgreich installiert
+- [ ] Virtuelle Umgebung aktivierbar
+- [ ] EXE-Datei wird im build-Ordner generiert
+- [ ] Kompilierte Anwendung startet ohne Fehler

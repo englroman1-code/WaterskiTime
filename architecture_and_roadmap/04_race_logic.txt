@@ -1,0 +1,131 @@
+# 04 - Rennlogik und Ereignisverarbeitung
+
+## Ziel: 
+Implementierung der Kernlogik für Rennsteuerung, Zeitberechnung und Platzierung gemäß Pflichtenheft
+
+## Zustandsmaschine (Rennphasen):
+```mermaid
+stateDiagram-v2
+    [*] --> Vorstart
+    Vorstart --> Aktiv: Startbefehl
+    Aktiv --> Rennende: Renndauer abgelaufen
+    Rennende --> [*]: Reset
+```
+
+## Kernkomponenten:
+
+### 1. Ereignismodell:
+- Jedes Event als NamedTuple:
+  ```python
+  from collections import namedtuple
+  Event = namedtuple('Event', ['zeitstempel', 'boot_id', 'event_typ'])
+  ```
+- Eventtypen: `START`, `PASSAGE`, `ZIEL`, `KORREKTUR`
+
+### 2. Sperrzeit-Implementierung:
+```python
+from datetime import datetime, timedelta
+
+sperrzeit = 2.0  # Sekunden
+letzte_eingabe = {}
+
+def ist_gueltige_eingabe(boot_id):
+    jetzt = datetime.now()
+    if boot_id in letzte_eingabe:
+        differenz = (jetzt - letzte_eingabe[boot_id]).total_seconds()
+        return differenz >= sperrzeit
+    return True
+
+def verarbeite_taste(boot_id):
+    if ist_gueltige_eingabe(boot_id):
+        event = Event(zeitstempel=datetime.now(), 
+                      boot_id=boot_id, 
+                      event_typ="PASSAGE")
+        ereignisliste.append(event)
+        letzte_eingabe[boot_id] = datetime.now()
+        return "VALID"
+    return "INVALID"
+```
+
+### 3. Rundenberechnungslogik:
+```python
+def berechne_runden(boot_id):
+    boot_events = [e for e in ereignisliste if e.boot_id == boot_id]
+    boot_events.sort(key=lambda x: x.zeitstempel)
+    
+    runden = []
+    for i in range(1, len(boot_events)):
+        if boot_events[i].event_typ == "PASSAGE":
+            dauer = (boot_events[i].zeitstempel - boot_events[i-1].zeitstempel).total_seconds()
+            runden.append(dauer)
+    
+    gesamtzeit = sum(runden)
+    return {
+        "runden": len(runden),
+        "schnellste_runde": min(runden) if runden else 0,
+        "gesamtzeit": gesamtzeit
+    }
+```
+
+### 4. Rennende-Logik (klassenweise):
+```python
+def klassen_abschluss(klasse):
+    boot_ids = [b.id for b in bootliste if b.klasse == klasse]
+    # Finde erste Passage nach Renndeauer
+    erste_passage = next((e for e in ereignisliste 
+                         if e.boot_id in boot_ids 
+                         and e.zeitstempel > rennende_zeit), None)
+    
+    if erste_passage:
+        # Aktiviere letzte Runde für alle Boote der Klasse
+        for bid in boot_ids:
+            boot = next(b for b in bootliste if b.id == bid)
+            boot.letzte_runde = True
+```
+
+### 5. Platzierungsalgorithmus:
+```python
+def berechne_platzierungen():
+    boot_daten = []
+    for boot in bootliste:
+        daten = berechne_runden(boot.id)
+        boot_daten.append({
+            "boot": boot,
+            "runden": daten["runden"],
+            "gesamtzeit": daten["gesamtzeit"]
+        })
+    
+    # Sortierung: 1. Runden, 2. Zeit
+    boot_daten.sort(key=lambda x: (-x["runden"], x["gesamtzeit"]))
+    
+    # Platzierung zuweisen
+    for i, daten in enumerate(boot_daten):
+        daten["boot"].platz = i + 1
+```
+
+## Fehlerbehandlung:
+
+### Manuelle Korrektur:
+```python
+def manuelle_korrektur(boot_id, operation):
+    if operation == "+1":
+        # Füge zusätzliche Runde hinzu
+        neues_event = Event(
+            zeitstempel=datetime.now(),
+            boot_id=boot_id,
+            event_typ="KORREKTUR+"
+        )
+        ereignisliste.append(neues_event)
+```
+
+### Wiederherstellungslogik:
+- Bei Neustart: Ereignisliste aus Blackbox-Log rekonstruieren
+- Zustand der Zustandsmaschine in separater Datei speichern
+
+## Akzeptanzkriterien:
+- [ ] Sperrzeit verhindert Doppelerfassungen (Test mit 500ms Intervallen)
+- [ ] Rundenberechnung für erste Runde korrekt (Start → Passage)
+- [ ] Klassenweise Abschluss nach Renndeuer aktiviert letzte Runde
+- [ ] Platzierung korrekt nach Rundenzahl und Gesamtzeit
+- [ ] Manuelle Korrekturen werden im Protokoll gekennzeichnet
+- [ ] Systemzustand kann nach Absturz vollständig wiederhergestellt werden
