@@ -17,6 +17,9 @@ nicht freigegeben (offener Punkt 1: Python ruft `mdlEngl` auf, die aktuelle
 Vorlage nutzt `mdl_Engl_Export`). Bis zur Korrektur `IMPORT.json` in Excel
 manuell über `ExportExpRangesToJSON` erzeugen und neben die `.exe` legen.
 
+**Nachbesserung (rc2):** Ein vorhandener, aber ungültiger/zu alter
+`race_state.json` wird beim Start gelöscht (nicht nur ignoriert).
+
 ### Neuerungen / Änderungen
 
 ## JsonRaceStore: Fuzzy-Matching entfernt, direkte FLD_/CODE-Key-Matches
