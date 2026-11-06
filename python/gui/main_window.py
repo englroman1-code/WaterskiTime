@@ -328,7 +328,15 @@ class AppController:
         saved_state = None
         if self._state_manager.exists():
             saved_state = self._state_manager.load()
-            if saved_state is not None:
+            if saved_state is None:
+                # Datei vorhanden, aber ungültig/zu alt/falsches Schema:
+                # nicht liegen lassen, sonst wird sie bei jedem Start erneut
+                # geprüft und verworfen.
+                logger.warning(
+                    "Crash-Recovery: vorhandener State ist ungültig oder zu "
+                    "alt – wird gelöscht")
+                self._state_manager.clear()
+            else:
                 logger.info("Crash-Recovery: race_state.json gefunden – "
                             "werde nach dem Laden wiederherstellen!")
                 self._data_source = "Crash-Recovery (race_state.json)"
