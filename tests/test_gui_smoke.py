@@ -283,6 +283,40 @@ def test_reset_restarts_countdown(app) -> None:
     assert not controller.engine.countdown_paused
 
 
+def test_reset_clears_remaining_clock(app) -> None:
+    """Bugfix 2026-11-09: NEUSTART setzt die rechte Uhr auf 00:00 zurück."""
+    window, controller = app
+    try:
+        _start_race(controller)
+        controller._tick()
+        # Während des Rennens zeigt die rechte Uhr die verbleibende Renndauer
+        assert window.countdown._race_value.cget("text") != "00:00"
+
+        controller.on_reset(confirm=False)
+        controller._tick()
+        assert window.countdown._race_value.cget("text") == "00:00"
+    finally:
+        controller.on_reset(confirm=False)
+
+
+def test_left_clock_shows_race_elapsed_after_all_lines_started(app) -> None:
+    """Feature 2026-11-09: Nach allen Startreihen zeigt links die Renndauer."""
+    window, controller = app
+    try:
+        _start_race(controller)
+        # Rennen 2 startet nur in Startreihe 1 → keine weitere Reihe offen.
+        # Startzeit künstlich 75 s in die Vergangenheit legen.
+        past = datetime.now() - timedelta(seconds=75)
+        controller.engine.race_start = past
+        for state in controller.engine.boats.values():
+            state.start_time = past
+        controller._tick()
+        assert window.countdown._prestart_title.cget("text") == "RENNDAUER:"
+        assert window.countdown._prestart_value.cget("text") == "01:15"
+    finally:
+        controller.on_reset(confirm=False)
+
+
 def test_blackbox_records_engine_events(app, tmp_path) -> None:
     """Die Blackbox protokolliert verarbeitete Engine-Events (START, PASSAGE)."""
     window, controller = app
@@ -666,6 +700,118 @@ def test_live_table_truncates_runner_name(tk_window) -> None:
     assert panel._truncate_runner("Kurz") == "Kurz"
 
 
+def test_live_table_runner_shows_boat_and_team_without_class(tk_window) -> None:
+    """Runner-Spalte: Boot-Nr + Team; die Klasse steht nur in ihrer Spalte."""
+    from python.core.models import BoatState, Starter
+    from python.gui.panels import LiveTablePanel
+
+    panel = LiveTablePanel(tk_window)
+    state = BoatState(starter=Starter(
+        boot_key="A", boat_number="101", skier="S. Huber",
+        klasse="U18", team="Team X"))
+    panel.update_boats({"A": state}, datetime.now())
+
+    row = panel._rows["A"]
+    assert row.labels[1].cget("text") == "101 Team X"
+    assert "U18" not in row.labels[1].cget("text")
+    assert row.labels[2].cget("text") == "U18"
+
+
+def test_live_table_status_dot_after_race_end(tk_window) -> None:
+    """Ampel: grüner/roter Punkt direkt neben dem Status (nach Rennende)."""
+    from python.core.models import BoatState, Starter
+    from python.gui.panels import LiveTablePanel
+
+    panel = LiveTablePanel(tk_window)
+    boats = {
+        "A": BoatState(starter=Starter(boot_key="A", boat_number="101")),
+        "B": BoatState(starter=Starter(boot_key="B", boat_number="102")),
+    }
+    now = datetime.now()
+
+    panel.update_boats(boats, now)
+    assert panel._rows["A"].status_dot.cget("text") == ""   # vor Rennende
+
+    panel.update_boats(boats, now, {"A": True, "B": False})
+    assert panel._rows["A"].status_dot.cget("text") == "●"
+    assert panel._rows["A"].status_dot.cget("text_color") == Cfg.COLOR_ACTIVE
+    assert panel._rows["B"].status_dot.cget("text_color") == Cfg.COLOR_ERROR
+
+
+def test_hotkey_panel_letter_follows_race_end_dot(tk_window) -> None:
+    """Klickbare Hotkey-Taste: rot bei rotem Punkt, weiß bei grünem Punkt."""
+    from python.gui.panels import HotkeyPanel
+
+    panel = HotkeyPanel(tk_window)
+    panel.set_starters([
+        Starter(boot_key="A", boat_number="101"),
+        Starter(boot_key="B", boat_number="102"),
+    ])
+    panel.set_started_keys({"A", "B"})
+
+    # Vor Rennende: weiße Schrift auf grüner Taste.
+    assert panel._buttons["A"].cget("text_color") == Cfg.COLOR_TEXT
+    assert panel._buttons["B"].cget("text_color") == Cfg.COLOR_TEXT
+
+    # Nach Rennende: A im Ziel (grün) → weiß, B offen (rot) → rot.
+    panel.set_crossed_keys({"A": True, "B": False})
+    assert panel._buttons["A"].cget("text_color") == Cfg.COLOR_TEXT
+    assert panel._buttons["B"].cget("text_color") == Cfg.COLOR_ERROR
+    # Die rote Taste bleibt klickbar und grün hinterlegt.
+    assert panel._buttons["B"].cget("state") == "normal"
+    assert panel._buttons["B"].cget("fg_color") == Cfg.COLOR_ACTIVE
+
+    # B kreuzt später: Punkt grün, Schrift wieder weiß.
+    panel.set_crossed_keys({"A": True, "B": True})
+    assert panel._buttons["B"].cget("text_color") == Cfg.COLOR_TEXT
+
+    # Rennen zurückgesetzt: Ampel aus, normale Schrift.
+    panel.set_crossed_keys(None)
+    assert panel._buttons["B"].cget("text_color") == Cfg.COLOR_TEXT
+
+    # Beendete Klasse bleibt grau/deaktiviert (Ampel überschreibt nicht).
+    panel.set_crossed_keys({"A": True, "B": False})
+    panel.set_finished_keys({"B"})
+    assert panel._buttons["B"].cget("text_color") == "#666666"
+    assert panel._buttons["B"].cget("state") == "disabled"
+
+
+def test_rennenende_ampel_im_controller_tick(app) -> None:
+    """Integration: Der Tick füllt die Ampel (grün/rot) in der Live-Tabelle."""
+    window, controller = app
+    start_config = controller.scenario.selected_config
+    try:
+        # Rennen 1 kann von früheren Tests bereits beendet sein (die
+        # Ergebnisse bleiben im Speicher). Für diesen Test brauchen wir ein
+        # frisches Rennen – sonst sind die Boote schon `finished_at`.
+        controller.engine.finished_races.pop(1, None)
+        controller._on_race_selected("Rennen 1 (DAMEN, MEN)")
+        _start_race(controller)
+
+        # Rennzeit abgelaufen → Endphase
+        controller.engine.race_end = datetime.now() - timedelta(seconds=1)
+        controller._tick()
+        assert controller.engine.phase == RacePhase.FINISHING
+
+        # Ein MEN-Boot passiert nach Rennende die Ziellinie
+        controller.engine.handle_key_press("E", datetime.now())
+        controller._tick()
+
+        panel = window.race_end_status
+        assert panel._boat_status.get("MEN")
+        assert panel._count_labels["MEN"].cget("text") == "1/2"
+        assert panel._finish_buttons["MEN"].cget("fg_color") == Cfg.COLOR_ERROR
+
+        # Die Punkte stehen neben dem Statustext in der Live-Tabelle
+        live = window.live_table
+        assert live._rows["E"].status_dot.cget("text") == "●"
+        assert live._rows["E"].status_dot.cget("text_color") == Cfg.COLOR_ACTIVE
+        assert live._rows["G"].status_dot.cget("text_color") == Cfg.COLOR_ERROR
+    finally:
+        controller._load_race(start_config)
+        window.update_idletasks()
+
+
 def test_finish_button_disabled_before_race_over(tk_window) -> None:
     """Beenden-Button ist vor Rennende sichtbar, aber inaktiv (grau)."""
     from python.core.models import RaceClass
@@ -701,11 +847,61 @@ def test_finish_button_disabled_again_when_class_closed(tk_window) -> None:
     panel.update_classes({"MEN": RaceClass("MEN")})
     panel.set_race_over(True)
     # Klasse als FERTIG markieren (CLOSED)
-    panel._rows["MEN"].configure(text="FERTIG")
-    panel._apply_finish_button_state("MEN", panel._finish_buttons["MEN"])
+    panel.update_states({"MEN": "CLOSED"})
     button = panel._finish_buttons["MEN"]
     assert str(button.cget("state")) == "disabled"
     assert button.cget("fg_color") == "#3A3A3A"
+
+
+def test_finish_button_green_when_all_boats_crossed(tk_window) -> None:
+    """Rennende-Ampel: sind alle Boote im Ziel, wird der Button grün."""
+    from python.core.models import RaceClass
+    from python.gui.panels import RaceEndStatusPanel
+
+    panel = RaceEndStatusPanel(tk_window)
+    panel.update_classes({"MEN": RaceClass("MEN")})
+    panel.set_race_over(True)
+    panel.update_states({"MEN": "WAITING"},
+                        {"MEN": [("A", True), ("B", True)]})
+
+    button = panel._finish_buttons["MEN"]
+    assert str(button.cget("state")) == "normal"
+    assert button.cget("fg_color") == Cfg.COLOR_ACTIVE
+    assert panel._count_labels["MEN"].cget("text") == "2/2"
+
+
+def test_finish_button_red_when_one_boat_missing(tk_window) -> None:
+    """Rennende-Ampel: fehlt ein Boot, wird der Button rot – bleibt aber aktiv."""
+    from python.core.models import RaceClass
+    from python.gui.panels import RaceEndStatusPanel
+
+    panel = RaceEndStatusPanel(tk_window)
+    panel.update_classes({"MEN": RaceClass("MEN")})
+    panel.set_race_over(True)
+    panel.update_states({"MEN": "WAITING"},
+                        {"MEN": [("A", True), ("B", False)]})
+
+    button = panel._finish_buttons["MEN"]
+    assert str(button.cget("state")) == "normal"   # Kundenwunsch: nicht verbieten
+    assert button.cget("fg_color") == Cfg.COLOR_ERROR
+    assert panel._count_labels["MEN"].cget("text") == "1/2"
+
+
+def test_finish_button_disabled_when_closed_with_red_boats(tk_window) -> None:
+    """Nach dem Beenden bleibt die Ampel sichtbar, der Button ist aber grau."""
+    from python.core.models import RaceClass
+    from python.gui.panels import RaceEndStatusPanel
+
+    panel = RaceEndStatusPanel(tk_window)
+    panel.update_classes({"MEN": RaceClass("MEN")})
+    panel.set_race_over(True)
+    panel.update_states({"MEN": "CLOSED"},
+                        {"MEN": [("A", False)]})
+
+    button = panel._finish_buttons["MEN"]
+    assert str(button.cget("state")) == "disabled"
+    assert button.cget("fg_color") == "#3A3A3A"
+    assert panel._count_labels["MEN"].cget("text") == "0/1"
 
 
 def test_race_end_status_no_empty_line_when_classes_loaded(tk_window) -> None:

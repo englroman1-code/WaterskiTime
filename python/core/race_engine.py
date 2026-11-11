@@ -147,6 +147,8 @@ class RaceEngine:
                 continue
             state.laps = list(old.laps)
             state.last_passage = old.last_passage
+            # getattr: sehr alte In-Memory-States kennen das Feld noch nicht
+            state.last_real_passage = getattr(old, "last_real_passage", None)
             state.finished_at = old.finished_at
             state.place = old.place
             state.start_time = old.start_time
@@ -317,6 +319,10 @@ class RaceEngine:
         # --- 3. Runde abschließen -----------------------------------------
         assert self.race_start is not None
         ResultCalculator.add_lap(state, now, self.race_start)
+        # Echte Zielpassage merken (2026-11-10): Grundlage für die
+        # Rennende-Ampel. +1-Korrekturen setzen dieses Feld bewusst NICHT,
+        # weil ihr Zeitstempel die Klickzeit und keine Zielpassage ist.
+        state.last_real_passage = now
         event = RaceEvent(timestamp=now, boot_key=key,
                           event_type=EventType.PASSAGE, valid=True)
         self.events.append(event)
@@ -480,6 +486,31 @@ class RaceEngine:
             return timedelta()
         return max(self.race_end - now, timedelta())
 
+    def race_elapsed(self, now: datetime) -> timedelta:
+        """Vergangene Renndauer seit dem ersten Start (für die GUI-Anzeige).
+
+        Die linke Uhr zeigt nach dem Start aller Startreihen nicht mehr den
+        Startreihen-Countdown, sondern die tatsächliche Renndauer. Basis ist
+        `race_start` (Start der Startreihe 1). In der Phase FINISHED wird die
+        Anzeige auf den Zeitpunkt des letzten Zieleinlaufs eingefroren, damit
+        sie nach Rennende nicht weiterläuft.
+
+        Args:
+            now: aktueller Zeitpunkt.
+
+        Returns:
+            Vergangene Zeit seit dem ersten Start (0 wenn noch nicht gestartet).
+        """
+        if self.race_start is None:
+            return timedelta()
+        end = now
+        if self.phase == RacePhase.FINISHED:
+            finished = [state.finished_at for state in self.boats.values()
+                        if state.finished_at is not None]
+            if finished:
+                end = max(finished)
+        return max(end - self.race_start, timedelta())
+
     def start_line_remaining(self, now: datetime) -> timedelta:
         """Zeit bis zum Start der nächsten noch nicht gestarteten Startreihe.
 
@@ -577,6 +608,27 @@ class RaceEngine:
         assert self._tracker is not None
         return self._tracker.status()
 
+    def get_crossed_after_race_end(self) -> dict[str, bool]:
+        """Je Boot: hat es nach dem Rennende noch eine echte Zielpassage gehabt?
+
+        Grundlage ist `BoatState.last_real_passage` – also nur echte
+        Hotkey-Passagen, keine manuellen +1-Korrekturen. Die GUI zeigt damit
+        nach Ablauf der Renndauer pro Boot einen grünen Punkt (im Ziel
+        angekommen) oder einen roten Punkt (noch nicht).
+
+        Returns:
+            boot_key → True, wenn die letzte echte Passage am oder nach
+            `race_end` liegt; sonst False. Vor dem Rennstart (kein
+            `race_end`) sind alle Werte False.
+        """
+        if self.race_end is None:
+            return {key: False for key in self.boats}
+        return {
+            key: (state.last_real_passage is not None
+                  and state.last_real_passage >= self.race_end)
+            for key, state in self.boats.items()
+        }
+
     # ------------------------------------------------------------------
     # Serialisierung (Crash-Recovery)
     # ------------------------------------------------------------------
@@ -602,6 +654,8 @@ class RaceEngine:
                 "laps_count": state.laps_count,
                 "total_time_s": state.total_time.total_seconds(),
                 "last_passage": state.last_passage.isoformat() if state.last_passage else None,
+                "last_real_passage": (state.last_real_passage.isoformat()
+                                      if state.last_real_passage else None),
                 "finished_at": state.finished_at.isoformat() if state.finished_at else None,
                 "place": state.place,
                 "start_time": state.start_time.isoformat() if state.start_time else None,
@@ -684,6 +738,8 @@ class RaceEngine:
                 bs = self.boats[key]
                 saved_laps = boat_data.get("laps_count", 0)
                 bs.last_passage = _parse_dt(boat_data.get("last_passage"))
+                bs.last_real_passage = _parse_dt(
+                    boat_data.get("last_real_passage"))
                 bs.finished_at = _parse_dt(boat_data.get("finished_at"))
                 bs.place = boat_data.get("place")
                 bs.start_time = _parse_dt(boat_data.get("start_time"))
@@ -733,6 +789,21 @@ class RaceEngine:
                 source=evt_data.get("source", "SYSTEM"),
                 detail=evt_data.get("detail", ""),
             ))
+
+        # Rückwärtskompatibilität (2026-11-10): Ältere Crash-States enthalten
+        # noch kein `last_real_passage`. Es wird aus den wiederhergestellten
+        # echten PASSAGE-Events abgeleitet – Korrekturen zählen NICHT.
+        for key, bs in self.boats.items():
+            if bs.last_real_passage is not None:
+                continue
+            passages = [
+                event.timestamp for event in self.events
+                if event.valid
+                and event.event_type == EventType.PASSAGE
+                and event.boot_key.upper() == key
+            ]
+            if passages:
+                bs.last_real_passage = max(passages)
 
         # Klassen-Zustände wiederherstellen
         for name, cls_data in state.get("classes", {}).items():

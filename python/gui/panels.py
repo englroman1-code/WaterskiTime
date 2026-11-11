@@ -463,6 +463,28 @@ class CountdownPanel(ctk.CTkFrame):
         if total > 0:
             self._race_bar.set(max(0.0, min(1.0, seconds / total)))
 
+    def set_race_elapsed(self, seconds: float, total: float) -> None:
+        """Zeigt die vergangene Renndauer in der linken Kachel.
+
+        Sobald alle Startreihen gestartet sind, ist der Startreihen-Countdown
+        sinnlos. Stattdessen zeigt die linke Kachel dann die Zeit seit dem
+        ersten Start (Renndauer). Farben: neutral weiß, Fortschrittsbalken
+        blau (Anteil der Renndauer).
+
+        Args:
+            seconds: vergangene Zeit seit dem ersten Start in Sekunden.
+            total: Gesamtdauer des Rennens (für den Fortschrittsbalken).
+        """
+        self._prestart_title.configure(text="RENNDAUER:",
+                                       text_color=Cfg.COLOR_TEXT)
+        self._prestart_value.configure(text=format_remaining(seconds),
+                                       text_color=Cfg.COLOR_TEXT)
+        self._prestart_bar.configure(progress_color=Cfg.COLOR_PROGRESS)
+        if total > 0:
+            self._prestart_bar.set(max(0.0, min(1.0, seconds / total)))
+        else:
+            self._prestart_bar.set(0.0)
+
     def set_start_line(self, line_number: int, seconds: float, total: float) -> None:
         """Zeigt den Startreihen-Countdown in der VORSTART-Kachel.
 
@@ -550,8 +572,9 @@ class _TableRow:
 
     Attribute:
         frame: Zeilen-Frame im Scrollbereich der Tabelle.
-        labels: die 8 Zellen-Labels (Platz, Runner, Klasse, Boot, Reihe,
-            Runden, Letzte Runde, Gesamtzeit).
+        labels: die 9 Zellen-Labels (Platz, Runner, Klasse, Boot, Reihe,
+            Runden, Letzte Runde, Geschw., Gesamtzeit).
+        status_dot: farbiger Punkt direkt neben dem Status (Rennende-Ampel).
         status_label: Status-Label (WARTET / SPERRZEIT / GESTARTET / FERTIG).
         rendered: Snapshot der zuletzt gesetzten Werte (Text/Font/Farbe je
             Zelle) – nur Abweichungen lösen ein Widget-Update aus.
@@ -559,6 +582,7 @@ class _TableRow:
     frame: ctk.CTkFrame
     labels: list[ctk.CTkLabel]
     status_label: ctk.CTkLabel
+    status_dot: ctk.CTkLabel
     rendered: dict = field(default_factory=dict)
 
 
@@ -623,7 +647,8 @@ class LiveTablePanel(ctk.CTkFrame):
         self._lap1_length_m = lap1_length_m
         self._standard_lap_length_m = standard_lap_length_m
 
-    def update_boats(self, boats: dict[str, BoatState], now: datetime) -> None:
+    def update_boats(self, boats: dict[str, BoatState], now: datetime,
+                     crossed_after_end: dict[str, bool] | None = None) -> None:
         """Aktualisiert die Rangliste aus den aktuellen Boots-Zuständen.
 
         Vorhandene Zeilen werden wiederverwendet und nur bei echten
@@ -633,6 +658,8 @@ class LiveTablePanel(ctk.CTkFrame):
         Args:
             boats: boot_key → BoatState (alle Starter des Rennens).
             now: aktueller Zeitpunkt (für die Sperrzeit-Anzeige).
+            crossed_after_end: Optional boot_key → hatte nach dem Rennende
+                eine echte Zielpassage. None = vor Rennende (kein Punkt).
         """
         # Sortieren: 1. Rundenzahl absteigend, 2. Gesamtzeit aufsteigend
         ranked = sorted(boats.values(),
@@ -651,7 +678,7 @@ class LiveTablePanel(ctk.CTkFrame):
             if row is None:
                 row = self._add_row(state)
                 self._rows[state.starter.boot_key] = row
-            self._refresh_row(row, place, state, now)
+            self._refresh_row(row, place, state, now, crossed_after_end)
 
     def _add_row(self, state: BoatState) -> _TableRow:
         """Legt eine Tabellenzeile für einen BoatState einmalig an.
@@ -670,14 +697,24 @@ class LiveTablePanel(ctk.CTkFrame):
             label.grid(row=0, column=col, padx=2, pady=3)
             labels.append(label)
 
-        status_label = ctk.CTkLabel(frame, text="", font=("Segoe UI", 12, "bold"),
-                                    width=self.COLUMNS[9][1], anchor="w")
-        status_label.grid(row=0, column=9, padx=2, pady=3)
+        # Status-Zelle: Punkt (Rennende-Ampel) + Statustext. Der Punkt hat
+        # eine eigene Farbe, damit der Statustext seine Bedeutung behält.
+        status_cell = ctk.CTkFrame(frame, fg_color="transparent")
+        status_cell.grid(row=0, column=9, padx=2, pady=3, sticky="w")
+        status_dot = ctk.CTkLabel(status_cell, text="", width=16,
+                                  font=("Segoe UI", 14, "bold"), anchor="w")
+        status_dot.pack(side="left", padx=(0, 2))
+        status_label = ctk.CTkLabel(
+            status_cell, text="", font=("Segoe UI", 12, "bold"),
+            width=self.COLUMNS[9][1] - 20, anchor="w")
+        status_label.pack(side="left")
 
-        return _TableRow(frame=frame, labels=labels, status_label=status_label)
+        return _TableRow(frame=frame, labels=labels,
+                         status_label=status_label, status_dot=status_dot)
 
     def _refresh_row(self, row: _TableRow, place: int, state: BoatState,
-                     now: datetime) -> None:
+                     now: datetime,
+                     crossed_after_end: dict[str, bool] | None = None) -> None:
         """Schreibt nur die tatsächlich geänderten Werte in eine Zeile.
 
         Args:
@@ -685,6 +722,8 @@ class LiveTablePanel(ctk.CTkFrame):
             place: aktuelle Platzierung (1 = Führender, grün markiert).
             state: Laufzeit-Zustand des Boots.
             now: aktueller Zeitpunkt (Sperrzeit-Anzeige).
+            crossed_after_end: Optional boot_key → im Ziel nach Rennende.
+                None = vor Rennende (kein Ampel-Punkt).
         """
         is_leader = place == 1 and state.laps_count > 0
         row_bg = "#123B21" if is_leader else Cfg.COLOR_PANEL
@@ -694,8 +733,14 @@ class LiveTablePanel(ctk.CTkFrame):
             row.frame.configure(fg_color=row_bg)
             row.rendered["bg"] = row_bg
 
+        # Rennende-Zustand je Boot: steuert den Punkt in der Statusspalte.
+        crossed: bool | None = None
+        if crossed_after_end is not None:
+            crossed = crossed_after_end.get(
+                state.starter.boot_key.upper(), False)
+
         # Zellen-Inhalte: nur bei Änderung von Text/Font/Farbe neu setzen
-        runner = self._truncate_runner(state.starter.display_name)
+        runner = self._truncate_runner(self._runner_name(state.starter))
         cells = [
             str(place),
             runner,
@@ -737,8 +782,38 @@ class LiveTablePanel(ctk.CTkFrame):
             row.status_label.configure(text=status_text, text_color=status_color)
             row.rendered["status"] = (status_text, status_color)
 
+        # Rennende-Ampel: grüner/roter Punkt direkt neben dem Statustext.
+        # Vor Rennende (crossed is None) bleibt die Zelle leer.
+        if crossed is None:
+            dot_text = ""
+            dot_color = Cfg.COLOR_TEXT_SECONDARY
+        else:
+            dot_text = "●"
+            dot_color = Cfg.COLOR_ACTIVE if crossed else Cfg.COLOR_ERROR
+        if row.rendered.get("dot") != (dot_text, dot_color):
+            row.status_dot.configure(text=dot_text, text_color=dot_color)
+            row.rendered["dot"] = (dot_text, dot_color)
+
         # Position im Raster neu setzen (Sortierung) – Layout-Operation, kein Rebuild
         row.frame.grid(row=place - 1, column=0, sticky="ew", pady=1)
+
+    @staticmethod
+    def _runner_name(starter: Starter) -> str:
+        """Runner-Text: Boot-Nummer + Team (ohne Klasse).
+
+        Die Klasse steht in der eigenen Spalte „Klasse“ (Kundenentscheidung
+        2026-11-10). Fehlen Boot-Nummer und Team, wird ersatzweise der
+        Fahrername angezeigt.
+
+        Args:
+            starter: Stammdaten des Boots.
+
+        Returns:
+            Anzeigename für die Runner-Spalte, z. B. "101 Team X".
+        """
+        parts = [starter.boat_number.strip(), starter.team.strip()]
+        name = " ".join(part for part in parts if part)
+        return name or starter.skier
 
     def _truncate_runner(self, name: str) -> str:
         """Kürzt einen Runner-Namen auf RUNNER_MAX_CHARS (mit '…').
@@ -810,6 +885,9 @@ class HotkeyPanel(ctk.CTkFrame):
         self._active_keys: set[str] = set()
         self._started_keys: set[str] = set()
         self._finished_keys: set[str] = set()   # Boot-Keys beendeter Klassen
+        # Rennende-Ampel je Boot: True = im Ziel (weiß), False = offen (rot),
+        # None = vor Rennende (normale Schriftfarbe).
+        self._crossed_keys: dict[str, bool] | None = None
         self._buttons: dict[str, ctk.CTkButton] = {}
 
         # Überschrift mit Hotkey-Status (Admin-Rechte, 2026-09-03)
@@ -850,6 +928,7 @@ class HotkeyPanel(ctk.CTkFrame):
         self._active_keys = {s.boot_key for s in starters}
         self._started_keys: set[str] = set()
         self._finished_keys: set[str] = set()
+        self._crossed_keys = None
         self._refresh_buttons()
 
     def set_started_keys(self, started_keys: set[str]) -> None:
@@ -882,6 +961,24 @@ class HotkeyPanel(ctk.CTkFrame):
         self._finished_keys = finished_keys
         self._refresh_buttons()
 
+    def set_crossed_keys(self, crossed: dict[str, bool] | None) -> None:
+        """Färbt die Hotkey-Tasten nach Rennende rot bzw. wieder weiß.
+
+        Grundlage ist dieselbe Rennende-Ampel wie in der Live-Tabelle:
+        Rot bedeutet, das Boot war seit dem Rennende noch nicht im Ziel;
+        die Taste bleibt klickbar, damit der Bediener die Zielpassage
+        erfassen kann. Grün setzt die Schrift wieder auf Weiß.
+
+        Args:
+            crossed: boot_key → True (im Ziel, weiß) / False (offen, rot).
+                None = vor Rennende (normale Schriftfarbe).
+        """
+        normalized = dict(crossed) if crossed is not None else None
+        if normalized == self._crossed_keys:
+            return  # kein Change → kein UI-Update
+        self._crossed_keys = normalized
+        self._refresh_buttons()
+
     def set_hotkey_status(self, text: str, active: bool) -> None:
         """Zeigt den Hotkey-Status (Admin-Rechte) neben der Überschrift.
 
@@ -902,10 +999,16 @@ class HotkeyPanel(ctk.CTkFrame):
                                  text_color="#666666",
                                  state="disabled")
             elif key in self._started_keys:
-                # Gestartet: grün aktiv
+                # Gestartet: grün aktiv. Nach Rennende wird die Schrift rot,
+                # solange das Boot laut Ampel noch nicht im Ziel ist.
+                text_color = Cfg.COLOR_TEXT
+                if self._crossed_keys is not None:
+                    text_color = (Cfg.COLOR_TEXT
+                                  if self._crossed_keys.get(key, False)
+                                  else Cfg.COLOR_ERROR)
                 button.configure(fg_color=Cfg.COLOR_ACTIVE,
                                  hover_color="#00A844",
-                                 text_color=Cfg.COLOR_TEXT,
+                                 text_color=text_color,
                                  state="normal")
             elif key in self._active_keys:
                 # Starter vorhanden, aber noch nicht gestartet: grau inaktiv
@@ -1014,6 +1117,12 @@ class RaceEndStatusPanel(ctk.CTkFrame):
     Jede Klasse hat einen "Beenden"-Button (Kundenentscheidung 2026-09-03):
     Der Bediener beendet eine Klasse manuell, wenn die Renndauer abgelaufen
     ist. Beim Beenden werden alle Boote der Klasse als fertig markiert.
+
+    Rennende-Ampel (2026-11-10): Nach Ablauf der Renndauer zeigt die
+    Live-Tabelle je Boot einen grünen/roten Punkt neben dem Statustext.
+    Dieses Panel fasst das je Klasse als Zähler "fertig/gesamt" zusammen und
+    färbt den Button grün (alle im Ziel) bzw. rot (mind. ein Boot offen);
+    der Button bleibt in beiden Fällen klickbar.
     """
 
     # Zustand → Anzeigetext + Farbe
@@ -1033,6 +1142,11 @@ class RaceEndStatusPanel(ctk.CTkFrame):
         self._finish_buttons: dict[str, ctk.CTkButton] = {}  # Klassenname → Beenden-Button
         self._on_finish_class: callable | None = None
         self._race_over: bool = False   # Rennzeit abgelaufen → Beenden aktivierbar
+        # Rennende-Ampel (2026-11-10): Zähler "fertig/gesamt" je Klasse.
+        # Die Punkte je Boot stehen in der Live-Tabelle (Statusspalte).
+        self._count_labels: dict[str, ctk.CTkLabel] = {}      # "3/4"
+        self._boat_status: dict[str, list[tuple[str, bool]]] = {}
+        self._finish_states: dict[str, str] = {}   # Klassen-Zustand (maßgeblich)
         self._info = ctk.CTkLabel(self, text="Keine Klassen geladen",
                                   font=("Segoe UI", 12),
                                   text_color=Cfg.COLOR_TEXT_SECONDARY)
@@ -1081,6 +1195,9 @@ class RaceEndStatusPanel(ctk.CTkFrame):
         self._row_frames = []
         self._rows = {}
         self._finish_buttons = {}
+        self._count_labels = {}
+        self._boat_status = {}
+        self._finish_states = {}
 
         self._info.destroy()
         self._info = ctk.CTkLabel(self, text="Keine Klassen geladen",
@@ -1094,21 +1211,34 @@ class RaceEndStatusPanel(ctk.CTkFrame):
         for klasse in sorted(classes):
             row = ctk.CTkFrame(self, fg_color="transparent")
             row.pack(fill="x", padx=16, pady=1)
-            ctk.CTkLabel(row, text=f"Klasse {klasse}:", font=("Segoe UI", 13),
+
+            # Erste Zeile: Klassenname, Zustand, Zähler, Beenden-Button
+            top_line = ctk.CTkFrame(row, fg_color="transparent")
+            top_line.pack(fill="x")
+            ctk.CTkLabel(top_line, text=f"Klasse {klasse}:",
+                         font=("Segoe UI", 13),
                          text_color=Cfg.COLOR_TEXT_SECONDARY).pack(side="left")
-            value_label = ctk.CTkLabel(row, text="WARTEND", font=("Segoe UI", 13, "bold"),
+            value_label = ctk.CTkLabel(top_line, text="WARTEND",
+                                       font=("Segoe UI", 13, "bold"),
                                        text_color=Cfg.COLOR_WARNING)
             value_label.pack(side="left", padx=8)
+            # Zähler "fertig/gesamt" (Rennende-Ampel, 2026-11-10)
+            count_label = ctk.CTkLabel(top_line, text="",
+                                       font=("Segoe UI", 11, "bold"),
+                                       text_color=Cfg.COLOR_TEXT_SECONDARY)
+            count_label.pack(side="left", padx=(0, 6))
             # Beenden-Button (manuelle Klassen-Beendigung, 2026-09-03)
             finish_button = ctk.CTkButton(
-                row, text="Beenden", width=80, height=24, corner_radius=6,
+                top_line, text="Beenden", width=80, height=24, corner_radius=6,
                 font=("Segoe UI", 11, "bold"),
                 fg_color=Cfg.COLOR_WARNING, hover_color="#FFB300",
                 text_color="#1A1A1A",
                 command=lambda k=klasse: self._press_finish(k))
             finish_button.pack(side="right", padx=4)
+
             self._row_frames.append(row)
             self._rows[klasse] = value_label
+            self._count_labels[klasse] = count_label
             self._finish_buttons[klasse] = finish_button
         self._refresh(classes)
 
@@ -1123,31 +1253,66 @@ class RaceEndStatusPanel(ctk.CTkFrame):
 
     def _apply_finish_button_state(self, klasse: str,
                                    button: ctk.CTkButton) -> None:
-        """Setzt den Zustand eines 'Beenden'-Buttons.
+        """Setzt den Zustand und die Farbe eines 'Beenden'-Buttons.
 
         Kundenanforderung (2026-09-03): Der Button ist erst aktiv, wenn die
         Rennzeit abgelaufen ist (`_race_over`) UND die Klasse noch nicht
         CLOSED ist. Sonst ist er sichtbar, aber inaktiv (grau).
 
+        Rennende-Ampel (2026-11-10): Nach Rennende ist der Button
+        - grün, wenn alle Boote der Klasse nach dem Rennende im Ziel waren,
+        - rot, wenn mindestens ein Boot noch offen ist.
+        Er bleibt in beiden Fällen klickbar (Kundenwunsch: nicht verbieten).
+
         Args:
             klasse: Klassenname (für den CLOSED-Zustand).
             button: der zu aktualisierende Button.
         """
-        if self._race_over:
-            # Aktiv nur, wenn die Klasse noch nicht CLOSED ist
-            if self._is_closed(klasse):
-                button.configure(state="disabled",
-                                 fg_color="#3A3A3A", text_color="#666666")
-            else:
-                button.configure(state="normal",
-                                 fg_color=Cfg.COLOR_WARNING,
-                                 text_color="#1A1A1A")
-        else:
+        if not self._race_over or self._is_closed(klasse):
             button.configure(state="disabled",
-                             fg_color="#3A3A3A", text_color="#666666")
+                             fg_color="#3A3A3A", hover_color="#3A3A3A",
+                             text_color="#666666")
+            return
+
+        counts = self._class_counts(klasse)
+        if counts is None:
+            # Noch keine Boots-Daten (z. B. direkt nach Rennende vor dem Tick)
+            button.configure(state="normal",
+                             fg_color=Cfg.COLOR_WARNING,
+                             hover_color="#FFB300",
+                             text_color="#1A1A1A")
+            return
+
+        done, total = counts
+        if total > 0 and done == total:
+            button.configure(state="normal",
+                             fg_color=Cfg.COLOR_ACTIVE,
+                             hover_color="#00E676",
+                             text_color=Cfg.COLOR_TEXT)
+        else:
+            button.configure(state="normal",
+                             fg_color=Cfg.COLOR_ERROR,
+                             hover_color="#FF5252",
+                             text_color=Cfg.COLOR_TEXT)
+
+    def _class_counts(self, klasse: str) -> tuple[int, int] | None:
+        """Liefert (fertige Boote, Boote gesamt) einer Klasse.
+
+        Args:
+            klasse: Klassenname.
+
+        Returns:
+            Tupel (done, total) oder None, wenn für die Klasse noch keine
+            Boots-Daten vorliegen (vor dem Rennende).
+        """
+        entries = self._boat_status.get(klasse)
+        if entries is None:
+            return None
+        done = sum(1 for _, crossed in entries if crossed)
+        return done, len(entries)
 
     def _is_closed(self, klasse: str) -> bool:
-        """True, wenn die Klasse CLOSED ist (über das aktuelle Label).
+        """True, wenn die Klasse CLOSED ist.
 
         Args:
             klasse: Klassenname.
@@ -1155,13 +1320,10 @@ class RaceEndStatusPanel(ctk.CTkFrame):
         Returns:
             True, wenn die Klasse beendet (CLOSED) ist.
         """
-        label = self._rows.get(klasse)
-        if label is None:
-            return False
-        return label.cget("text") == "FERTIG"
+        return self._finish_states.get(klasse) == "CLOSED"
 
     def _refresh(self, classes: dict[str, RaceClass]) -> None:
-        """Aktualisiert die Farben/ Texte der Statuszeilen.
+        """Aktualisiert die Farben/Texte der Statuszeilen.
 
         Args:
             classes: aktuelle Klassen-Zustände.
@@ -1170,13 +1332,33 @@ class RaceEndStatusPanel(ctk.CTkFrame):
             label = self._rows.get(klasse)
             if label is None:
                 continue
+            self._finish_states[klasse] = state.finish_state
             text, color = self.STATE_STYLE.get(state.finish_state,
                                                ("WARTEND", Cfg.COLOR_WARNING))
             label.configure(text=text, text_color=color)
+            self._update_count_label(klasse)
             # Beenden-Button: aktiv nur wenn Rennzeit abgelaufen + nicht CLOSED
             button = self._finish_buttons.get(klasse)
             if button is not None:
                 self._apply_finish_button_state(klasse, button)
+
+    def _update_count_label(self, klasse: str) -> None:
+        """Aktualisiert den Zähler 'fertig/gesamt' einer Klasse.
+
+        Args:
+            klasse: Klassenname.
+        """
+        label = self._count_labels.get(klasse)
+        if label is None:
+            return
+        counts = self._class_counts(klasse)
+        if counts is None:
+            label.configure(text="", text_color=Cfg.COLOR_TEXT_SECONDARY)
+            return
+        done, total = counts
+        color = (Cfg.COLOR_ACTIVE if total > 0 and done == total
+                 else Cfg.COLOR_ERROR)
+        label.configure(text=f"{done}/{total}", text_color=color)
 
     def set_finish_states(self, finish_states: dict[str, str]) -> None:
         """Setzt die Zustände direkt über ein Dict (Klasse → Zustand).
@@ -1188,7 +1370,9 @@ class RaceEndStatusPanel(ctk.CTkFrame):
                    for name, state in finish_states.items()}
         self.update_classes(classes)
 
-    def update_states(self, finish_states: dict[str, str]) -> None:
+    def update_states(self, finish_states: dict[str, str],
+                      boat_status: dict[str, list[tuple[str, bool]]]
+                      | None = None) -> None:
         """Schlankes Tick-Update: nur Text/Farbe der bestehenden Zeilen ändern.
 
         Baut die Widgets NICHT neu (für den 50-ms-Takt). Zeilen für unbekannte
@@ -1196,14 +1380,21 @@ class RaceEndStatusPanel(ctk.CTkFrame):
 
         Args:
             finish_states: Klasse → Zustand ("WAITING"/"CLOSED").
+            boat_status: Optional Klasse → Liste (boot_key, im Ziel nach
+                Rennende). Wird für den Zähler und die Button-Farbe
+                verwendet; die Punkte je Boot stehen in der Live-Tabelle.
         """
+        if boat_status is not None:
+            self._boat_status = boat_status
         for klasse, state in finish_states.items():
             label = self._rows.get(klasse)
             if label is None:
                 continue
+            self._finish_states[klasse] = state
             text, color = self.STATE_STYLE.get(state,
                                                ("WARTEND", Cfg.COLOR_WARNING))
             label.configure(text=text, text_color=color)
+            self._update_count_label(klasse)
             button = self._finish_buttons.get(klasse)
             if button is not None:
                 self._apply_finish_button_state(klasse, button)

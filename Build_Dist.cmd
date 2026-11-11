@@ -20,7 +20,7 @@ cd /d "%~dp0"
 
 echo.
 echo ============================================
-echo   Wasserski-Zeitnehmung – Build der .exe
+echo   Wasserski-Zeitnehmung Build der .exe
 echo ============================================
 echo.
 
@@ -32,6 +32,26 @@ if not exist ".venv\Scripts\python.exe" (
     echo.
     pause
     exit /b 1
+)
+
+rem --- Laufende App prüfen (sperrt dist\Wasserski-Zeitnehmung.exe) -------
+rem 2026-11-09: Genau daran ist der Build gescheitert:
+rem PermissionError: [WinError 5] Zugriff verweigert auf die laufende .exe.
+tasklist /FI "IMAGENAME eq Wasserski-Zeitnehmung.exe" 2>nul | find /I "Wasserski-Zeitnehmung.exe" >nul
+if not errorlevel 1 (
+    echo.
+    echo WARNUNG: Die Anwendung laeuft noch und sperrt
+    echo          dist\Wasserski-Zeitnehmung.exe.
+    echo.
+    choice /C JN /N /M "Alle Fenster jetzt beenden und Build fortsetzen? [J/N] "
+    if errorlevel 2 (
+        echo.
+        echo Build abgebrochen. Bitte die Anwendung schliessen und erneut starten.
+        pause
+        exit /b 1
+    )
+    taskkill /F /IM "Wasserski-Zeitnehmung.exe" >nul 2>&1
+    timeout /t 2 /nobreak >nul
 )
 
 rem --- Alte Build-Artefakte bereinigen (verhindert Zugriff-verweigert) ---

@@ -1,6 +1,10 @@
 # Wasserski-Zeitnehmung – Bedienungsanleitung (Kurzfassung)
 
-Stand: 2026-11-06, Version 0.3.0 (Release-Kandidat)
+Stand: 2026-11-10, Version 0.5.0
+
+> **Vollständiges Handbuch:** `Manual.md` beschreibt Bedienung, Oberfläche,
+> Datenfluss, Crash-Recovery, Export und Fehlerbehebung ausführlich. Diese
+> Datei bleibt die Kurzfassung für den schnellen Einstieg.
 
 ## 1. Voraussetzungen
 

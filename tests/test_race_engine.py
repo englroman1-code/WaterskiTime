@@ -192,6 +192,72 @@ def test_passage_after_duration_does_not_finish_automatically() -> None:
     assert engine.phase == RacePhase.FINISHING
 
 
+def test_crossed_after_race_end_false_before_end() -> None:
+    """Rennende-Ampel: vor Ablauf der Renndauer ist kein Boot 'im Ziel'."""
+    engine = _make_engine()
+    _start_race(engine, BASE)
+    engine.handle_key_press("A", BASE + 21 * SEC + 30 * SEC)
+    crossed = engine.get_crossed_after_race_end()
+    assert crossed["A"] is False
+    assert crossed["B"] is False
+    assert crossed["C"] is False
+
+
+def test_crossed_after_race_end_marks_only_crossing_boats() -> None:
+    """Rennende-Ampel: nur Boote mit echter Passage nach race_end sind grün."""
+    engine = _make_engine()
+    _go_finishing(engine)
+    t = BASE + 21 * SEC + 10 * 60 * SEC + 30 * SEC
+    engine.handle_key_press("A", t)
+
+    crossed = engine.get_crossed_after_race_end()
+    assert crossed["A"] is True
+    assert crossed["B"] is False
+    assert crossed["C"] is False
+
+
+def test_crossed_after_race_end_ignores_manual_correction() -> None:
+    """Eine +1-Korrektur darf kein falsches Grün erzeugen (Klickzeit!)."""
+    engine = _make_engine()
+    _go_finishing(engine)
+    t = BASE + 21 * SEC + 10 * 60 * SEC + 30 * SEC
+    engine.handle_manual_correction("A", 1, t)
+
+    assert engine.boats["A"].laps_count == 1
+    assert engine.get_crossed_after_race_end()["A"] is False
+
+
+def test_crossed_after_race_end_survives_serialization() -> None:
+    """Die echte Zielpassage überlebt to_dict/restore_from_state."""
+    engine = _make_engine()
+    _go_finishing(engine)
+    t = BASE + 21 * SEC + 10 * 60 * SEC + 30 * SEC
+    engine.handle_key_press("A", t)
+
+    restored = _make_engine()
+    restored.restore_from_state(engine.to_dict())
+
+    crossed = restored.get_crossed_after_race_end()
+    assert crossed["A"] is True
+    assert crossed["B"] is False
+
+
+def test_crossed_after_race_end_backfilled_from_events() -> None:
+    """Alte Crash-States ohne last_real_passage werden aus Events ergänzt."""
+    engine = _make_engine()
+    _go_finishing(engine)
+    t = BASE + 21 * SEC + 10 * 60 * SEC + 30 * SEC
+    engine.handle_key_press("A", t)
+
+    saved = engine.to_dict()
+    del saved["boats"]["A"]["last_real_passage"]   # altes Schema simulieren
+
+    restored = _make_engine()
+    restored.restore_from_state(saved)
+
+    assert restored.get_crossed_after_race_end()["A"] is True
+
+
 def test_finish_class_marks_boats_and_logs_finish_events() -> None:
     """finish_class() beendet alle Boote der Klasse + FINISH-Events."""
     engine = _make_engine()
@@ -598,6 +664,26 @@ def test_start_line_remaining_and_next() -> None:
     engine.tick(t0 + 16 * SEC)
     assert engine.next_start_line(t0 + 16 * SEC) is None
     assert engine.start_line_remaining(t0 + 16 * SEC) == timedelta()
+
+
+def test_race_elapsed_counts_until_finished() -> None:
+    """Renndauer (2026-11-09): zählt ab erstem Start und friert bei FINISHED ein."""
+    engine = _make_engine()
+    assert engine.race_elapsed(BASE) == timedelta()   # noch nicht gestartet
+    _start_race(engine, BASE)
+    t0 = BASE + 21 * SEC
+    # Kurz nach dem Start: Renndauer läuft mit
+    assert engine.race_elapsed(t0 + 5 * SEC) == 5 * SEC
+    # Alle Startreihen gestartet (Reihe 2 bei t0 + 15 s)
+    engine.tick(t0 + 16 * SEC)
+    assert engine.next_start_line(t0 + 16 * SEC) is None
+    assert engine.race_elapsed(t0 + 30 * SEC) == 30 * SEC
+
+    # Rennen beenden: FINISHED friert die Anzeige auf den letzten Zieleinlauf ein
+    engine.finish_class("MEN", t0 + 100 * SEC)
+    engine.finish_class("DAMEN", t0 + 120 * SEC)
+    assert engine.phase == RacePhase.FINISHED
+    assert engine.race_elapsed(t0 + 999 * SEC) == 120 * SEC
 
 
 def test_start_time_serialized_and_restored() -> None:

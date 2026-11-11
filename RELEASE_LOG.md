@@ -10,6 +10,204 @@
 
 ---
 
+## v0.5.0 – 2026-11-10
+
+**Version:** 0.5.0 (Bump von 0.4.0 via `scripts/bump_version.py 0.5.0`)
+
+**Inhalt:** Rennende-Ampel in der Live-Tabelle (grün/rot Punkt neben dem
+Statustext) und klickbare Hotkey-Taste im Panel Tastaturbedienung (rot bei
+offenem Boot, weiß bei Zielpassage); Runner-Spalte ohne Klasse; Doku
+(`Manual.md`) aktualisiert.
+
+**Status:** Release.
+
+**Vorgehen (AGENTS.md §5):**
+1. Version auf 0.5.0 gebumpt (`python/config/version.py` + `VERSION`)
+2. `ACTIVE_CHANGES.md` → `RELEASE_LOG.md` übernommen (v0.5.0, 2026-11-10)
+3. `ACTIVE_CHANGES.md` geleert (nur Kopfzeile)
+4. Dieses Release-Protokoll
+
+**Verifikation:** 235 Tests grün.
+
+---
+
+## v0.4.0 – 2026-11-09
+
+**Version:** 0.4.0 (Bump von 0.3.0 via `scripts/bump_version.py 0.4.0`)
+
+**Inhalt:** Renndauer-Uhr nach dem Start aller Startreihen, Ergebnis-Export
+um Distanz, Durchschnittsgeschwindigkeit und Rennzeit erweitert,
+PyInstaller-Build gegen laufende `.exe` abgesichert, Batchdatei-Fehler
+(LF/CRLF) behoben, Auto-Close-Smoke-Test sauber beendet, Handbuch auf den
+aktuellen Stand gebracht.
+
+**Status:** Release. Der direkte Excel-Start aus der App ist weiterhin
+**nicht freigegeben** (offener Punkt 1: Python ruft `mdlEngl` auf, die
+aktuelle Vorlage nutzt `mdl_Engl_Export`). `IMPORT.json` daher weiterhin
+manuell über `ExportExpRangesToJSON` erzeugen und neben die `.exe` legen.
+
+**Vorgehen (AGENTS.md §5):**
+1. Version auf 0.4.0 gebumpt (`version.py` + `VERSION`)
+2. `ACTIVE_CHANGES.md` → `RELEASE_LOG.md` übernommen (v0.4.0, 2026-11-09)
+3. `ACTIVE_CHANGES.md` geleert (nur Kopfzeile)
+4. Dieses Release-Protokoll
+
+**Verifikation:** 227/227 Tests grün; Build über `Build_Dist.cmd`
+erfolgreich; `dist\Wasserski-Zeitnehmung.exe` (14,6 MB); Smoke-Test mit
+`Wasserski-Zeitnehmung.exe 5 --json dist\IMPORT.json` → Exit-Code 0, keine
+Restprozesse.
+
+### Änderungen seit v0.3.0
+
+## 2026-11-09 – Auto-Close-Smoke-Test beendet mainloop sauber
+
+**Datei:** `python/gui/main_window.py`
+
+**Änderung:** Der Auto-Close-Modus (Parameter `Sekunden`) ruft jetzt zuerst
+`window.quit()` und danach `window.destroy()` auf. Damit endet die
+Tk-mainloop deterministisch und der Prozess bleibt nach dem Smoke-Test
+nicht hängen.
+
+**Verifikation:** `Wasserski-Zeitnehmung.exe 5 --json dist\IMPORT.json`
+beendet sich mit Exit-Code 0; anschließend läuft kein Restprozess.
+
+## 2026-11-09 – Build_Dist.cmd: LF-Zeilenenden repariert
+
+**Dateien:** `Build_Dist.cmd`, `.gitattributes` (neu), `ACTIVE_CHANGES.md`,
+`PROJECT_LOG.md`
+
+**Problem:** `Build_Dist.cmd` hatte nach dem letzten Edit nur LF-Zeilenenden.
+`cmd.exe` parst Batchdateien mit LF unzuverlässig – dadurch wurden Zeilen
+mitten im Wort abgeschnitten („Der Befehl "asserski-Zeitnehmung" …“) und die
+`.venv`-Prüfung schlug falsch an.
+
+**Fix:**
+- `Build_Dist.cmd` auf CRLF umgestellt (85 Zeilen).
+- Neue `.gitattributes` erzwingt `eol=crlf` für `*.cmd` und `*.bat`, damit
+  der Fehler beim nächsten Checkout nicht wieder auftritt.
+
+**Verifikation:** `Build_Dist.cmd` vollständig durchgelaufen; Build
+erfolgreich, `dist\Wasserski-Zeitnehmung.exe` 14,6 MB. Die .exe startet mit
+`5` (Auto-Close nach 5 s) ohne Fehler.
+
+## 2026-11-09 – Ergebnis-Export: Distance, avg_speed, Race_time, Penalties, Points
+
+**Dateien:** `python/excel/json_result_writer.py`,
+`tests/test_json_result_writer.py` (neu), `Manual.md`,
+`ACTIVE_CHANGES.md`, `PROJECT_LOG.md`
+
+**Kundenwunsch:** Die Ergebnis-JSON enthält pro Boot fünf zusätzliche
+Spalten wie in der Excel-Vorlage `Zeitnehmung.xlsm` (Blatt
+„results Herren“).
+
+**Neue Felder pro Ergebnis:**
+- `distance`: gefahrene Strecke in **km** –
+  `Länge R1 + (Runden - 1) × Länge R2+` (identisch zu „Calc Strecke“ in
+  Excel). Rundenlängen werden intern in Metern geführt und hier in km
+  umgerechnet; 3 Nachkommastellen.
+- `avg_speed`: Durchschnittsgeschwindigkeit in **km/h** über die
+  Gesamtdistanz (`distance / total_time`, 1 Nachkommastelle).
+- `race_time`: Zeit auf die **beste Strecke der Klasse im Rennen**
+  hochgerechnet – `eigene Zeit ÷ eigene Distanz × beste Distanz`
+  (Excel-Spalte „Rennzeit“). Ausgabe als formatierter Zeitstring wie
+  `total_time`. Bei fehlender Distanz `–`.
+- `penalties`: Platzhalter, aktuell `null` (Strafprozente werden außerhalb
+  der App gepflegt).
+- `points`: Platzhalter, aktuell `null`.
+
+**Technik:** `_serialize_result()` erhält die `RaceConfig`; neue Helfer
+`_distance_km()`, `_avg_speed_kmh()`, `_race_time()`, `_serialize_results()`.
+Die Referenzdistanz wird **pro Klasse** ermittelt – auch beim
+Einzel-Rennen-Export mit mehreren Klassen.
+
+**Tests:** neue Datei `tests/test_json_result_writer.py` mit 3 Tests
+(Distanz/Zeit/Speed-Werte, klassenbezogene Rennzeit, Boot ohne Runde).
+Gesamt **227/227 grün**.
+
+## 2026-11-09 – Build-Fix: laufende .exe sperrte den PyInstaller-Build
+
+**Dateien:** `Build_Dist.cmd`, `scripts/build_exe.py`, `ACTIVE_CHANGES.md`,
+`PROJECT_LOG.md`
+
+**Problem:** `Build_Dist.cmd` bzw. `scripts/build_exe.py` brach im
+EXE-Schritt ab:
+
+```
+PermissionError: [WinError 5] Zugriff verweigert:
+...\dist\Wasserski-Zeitnehmung.exe
+```
+
+Ursache: Die alte `.exe` lief noch (zwei Prozesse: PyInstaller-Bootloader +
+App-Kindprozess) und sperrte die Zieldatei. PyInstaller kann die laufende
+Datei nicht ersetzen.
+
+**Lösung:**
+- `Build_Dist.cmd` prüft vor dem Build per `tasklist`, ob
+  `Wasserski-Zeitnehmung.exe` läuft. Falls ja: klare Warnung und
+  `choice`-Abfrage „Alle Fenster jetzt beenden?“; bei Ja `taskkill` + 2 s
+  Wartezeit. Bei Nein sauberer Abbruch.
+- `scripts/build_exe.py` prüft die Zieldatei vor dem teuren Build per
+  Schreib-Lock (`open(exe, "ab")`) und liefert statt des kryptischen
+  `PermissionError` eine verständliche Meldung.
+
+**Verifikation:** Alte Testinstanz geschlossen (kein `race_state.json`,
+keine Ergebnisdateien vorhanden), Build erfolgreich:
+`dist\Wasserski-Zeitnehmung.exe` (14,6 MB), Smoke-Test mit
+`Wasserski-Zeitnehmung.exe 5` → Exit-Code 0.
+
+## 2026-11-09 – Uhren: Reset-Bugfix + Renndauer nach allen Startreihen
+
+**Dateien:** `python/gui/main_window.py`, `python/gui/panels.py`,
+`python/core/race_engine.py`, `tests/test_gui_smoke.py`,
+`tests/test_race_engine.py`, `Manual.md`, `ACTIVE_CHANGES.md`,
+`PROJECT_LOG.md`
+
+**Bugfix 1:** Nach **NEUSTART** blieb die rechte Uhr („VERBLEIBENDE ZEIT“)
+auf dem letzten Wert stehen. Ursache: Der `RESET`-Zweig im GUI-Tick
+aktualisierte nur die linke Kachel. Jetzt wird die verbleibende Zeit im
+Zustand `RESET` explizit auf `00:00` gesetzt (Fortschrittsbalken auf 0).
+
+**Feature 2:** Sobald alle Startreihen gestartet sind, zeigt die linke Kachel
+nicht mehr den (dann sinnlosen) Startreihen-Countdown, sondern
+**„RENNDAUER:“** – die vergangene Zeit seit dem ersten Start. Neue Methode
+`RaceEngine.race_elapsed(now)`; in Phase `FINISHED` wird die Anzeige auf den
+letzten Zieleinlauf eingefroren. Der Fortschrittsbalken zeigt den Anteil der
+geplanten Renndauer.
+
+**Tests:** +1 Engine-Test (`race_elapsed`), +2 GUI-Smoke-Tests
+(Reset setzt rechte Uhr zurück, linke Uhr zeigt Renndauer). Gesamt
+**224/224 grün** (Stand dieser Änderung).
+
+## 2026-11-08 – Manual.md als ausführliches Benutzerhandbuch neu geschrieben
+
+**Dateien:** `Manual.md`, `bilder/README.md` (neu), `bilder/` (neu),
+`BEDIENUNGSANLEITUNG.md`, `PROJECT_LOG.md`
+
+**Änderung:** `Manual.md` vollständig ersetzt. Die alte Kurzfassung wurde zu
+einem detaillierten deutschsprachigen Anwenderhandbuch mit 20 Abschnitten
+umgebaut: Zweck und Zielgruppe, Systemvoraussetzungen, Lieferumfang,
+Schnellstart, GUI im Detail, Excel-Vorbereitung, Rennablauf, Anzeige- und
+Platzierungslogik, Sperrzeit und Korrekturen, Crash-Recovery, Export,
+Datenfluss und Backup, technische Excel-Referenz, Ereignis-Log,
+Fehlerbehebung/FAQ, Abgleich mit dem Pflichtenheft, offene Punkte, Glossar,
+Bildplatzhalter und Dokumenthistorie.
+
+**Neu gegenüber der Altfassung:**
+- 14 Bildplatzhalter B1–B14 mit konkreten Dateinamen unter `bilder/`.
+- Eigener Abschnitt zum Abgleich mit `Pflichtenheft_V1.md` inklusive der
+  bewussten Abweichungen (manuelles Klassenende, Startreihen-Offset,
+  km-Angaben in Excel usw.).
+- Technische Referenz zu `IMPORT.json`, `race_state.json`, Blackbox- und
+  Ergebnisdateien.
+- Troubleshooting-Abschnitt mit den tatsächlichen Fehlertexten aus dem Code.
+
+**Hinweis:** Rein dokumentarische Änderung, kein Laufzeitcode betroffen.
+`bilder/README.md` listet die noch zu erstellenden Screenshots und deren
+Vorgaben. `BEDIENUNGSANLEITUNG.md` verweist auf das neue Handbuch,
+`PROJECT_LOG.md` enthält den entsprechenden Meilenstein-Eintrag.
+
+---
+
 ## v0.3.0 – 2026-11-06 (Release-Kandidat)
 
 **Status:** Release-Kandidat. Der direkte Excel-Start aus der App ist noch

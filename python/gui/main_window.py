@@ -1026,9 +1026,13 @@ class AppController:
         # --- Countdown- bzw. Rennzeit-Anzeige ------------------------------
         config = self.scenario.selected_config
         if self.engine.phase == RacePhase.RESET:
-            # Reset: Countdown steht still, Play-Button zeigt "Start"
+            # Reset: Countdown steht still, Play-Button zeigt "Start".
+            # Bugfix 2026-11-09: Auch die rechte Uhr (verbleibende Zeit) wird
+            # auf 00:00 zurückgesetzt – vorher blieb der letzte Wert stehen.
             self.window.countdown.set_prestart(
                 float(config.start_interval_s), float(config.start_interval_s))
+            self.window.countdown.set_race_remaining(
+                0.0, self._race_total_seconds)
             self.window.countdown.set_pause_enabled(False)
         elif self.engine.phase == RacePhase.PRESTART:
             remaining = max(
@@ -1052,8 +1056,12 @@ class AppController:
                 self.window.countdown.set_start_line(
                     next_line, line_remaining, float(config.grid_time_s))
             else:
-                # Keine weitere Startreihe → VORSTART-Kachel leer/neutral
-                self.window.countdown.set_prestart(0.0, 1.0)
+                # Alle Startreihen gestartet (2026-11-09): Die linke Uhr ist
+                # als Countdown sinnlos – sie zeigt jetzt die vergangene
+                # Renndauer seit dem ersten Start.
+                elapsed = self.engine.race_elapsed(now).total_seconds()
+                self.window.countdown.set_race_elapsed(
+                    elapsed, self._race_total_seconds)
 
         # --- Sperrzeit-Ablauf (Anzeige-Feld) aufräumen ----------------------
         for state in self.engine.boats.values():
@@ -1096,13 +1104,32 @@ class AppController:
 
         # --- Live-Tabelle + Rennende-Status (Wertung aktuell halten) --------
         self.engine.get_placements()
-        self.window.live_table.update_boats(self.engine.boats, now)
         # Beenden-Button erst aktiv, wenn die Rennzeit abgelaufen ist
         # (Phase FINISHING/FINISHED – Kundenanforderung 2026-09-03)
         race_over = self.engine.phase in (RacePhase.FINISHING, RacePhase.FINISHED)
+        # Rennende-Ampel (2026-11-10): pro Boot melden, ob es nach dem
+        # Rennende noch eine echte Zielpassage hatte. Die Punkte erscheinen
+        # in der Live-Tabelle neben dem Statustext; vor Rennende (None)
+        # bleibt die Statuszelle ohne Punkt.
+        crossed: dict[str, bool] | None = (
+            self.engine.get_crossed_after_race_end() if race_over else None)
+        # Dieselbe Ampel färbt die klickbaren Hotkey-Tasten: rot, solange
+        # das Boot nach Rennende noch nicht im Ziel ist; sonst weiß.
+        self.window.hotkeys.set_crossed_keys(crossed)
+        self.window.live_table.update_boats(
+            self.engine.boats, now, crossed)
         self.window.race_end_status.set_race_over(race_over)
+        # Zähler + Buttonfarbe im Rennende-Status (Punkte siehe Live-Tabelle).
+        boat_status: dict[str, list[tuple[str, bool]]] | None = None
+        if crossed is not None:
+            boat_status = {}
+            for key, state in self.engine.boats.items():
+                boat_status.setdefault(state.starter.klasse, []).append(
+                    (key, crossed.get(key, False)))
+            for entries in boat_status.values():
+                entries.sort(key=lambda item: item[0])
         self.window.race_end_status.update_states(
-            self.engine.get_class_finish_status())
+            self.engine.get_class_finish_status(), boat_status)
 
         # --- Phasenwechsel + neue Engine-Events loggen ----------------------
         if self.engine.phase != self._last_phase:
@@ -1235,6 +1262,12 @@ def run_app(enable_keyboard: bool | None = None,
         window.geometry(f"{Cfg.WINDOW_WIDTH}x{Cfg.WINDOW_HEIGHT}+50+50")
         window.lift()
         window.attributes("-topmost", True)
-        window.after(int(auto_close_seconds * 1000), window.destroy)
+
+        def _auto_close() -> None:
+            """Beendet im Smoke-Test zuerst die mainloop, dann das Fenster."""
+            window.quit()
+            window.destroy()
+
+        window.after(int(auto_close_seconds * 1000), _auto_close)
         logger.info("Auto-Close nach {}s aktiviert", auto_close_seconds)
     window.mainloop()

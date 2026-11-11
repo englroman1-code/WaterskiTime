@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from loguru import logger
@@ -86,9 +86,7 @@ class JsonResultWriter:
             "race_number": export.config.race_number,
             "race_duration_min": export.config.race_duration_min,
             "generated_at": export.generated_at.isoformat(),
-            "results": [
-                self._serialize_result(r) for r in export.results
-            ],
+            "results": self._serialize_results(export.results, export.config),
             "log": [
                 self._serialize_log_entry(e) for e in export.log_entries
             ],
@@ -166,7 +164,7 @@ class JsonResultWriter:
             classes = [
                 {
                     "klasse": klasse,
-                    "results": [self._serialize_result(r) for r in results],
+                    "results": self._serialize_results(results, export.config),
                 }
                 for klasse, results in by_class.items()
             ]
@@ -221,8 +219,104 @@ class JsonResultWriter:
             "organizer": event.organizer,
         }
 
-    def _serialize_result(self, result: BoatResult) -> dict:
-        """Serialisiert ein BoatResult-Objekt."""
+    def _serialize_results(self, results: list[BoatResult],
+                           config: RaceConfig) -> list[dict]:
+        """Serialisiert alle Ergebnisse eines Rennens bzw. einer Klasse.
+
+        Die Rennzeit (``race_time``) wird relativ zur besten Strecke der
+        Gruppe berechnet. Gruppe = Klasse innerhalb des Rennens (die
+        Ergebnisse werden bereits nach Klasse gruppiert übergeben). Die
+        beste Strecke ist die weiteste gefahrene Distanz der Gruppe –
+        in der Wertung entspricht das dem Sieger, weil primär nach
+        Rundenzahl sortiert wird.
+
+        Args:
+            results: Ergebnisse einer Klasse (oder des ganzen Rennens).
+            config: Rennkonfiguration (Rundenlängen für die Distanz).
+
+        Returns:
+            Liste serialisierter Ergebnis-Dicts.
+        """
+        best_by_class: dict[str, float] = {}
+        for result in results:
+            klasse = result.starter.klasse
+            distance = self._distance_km(result, config)
+            best_by_class[klasse] = max(best_by_class.get(klasse, 0.0), distance)
+        return [
+            self._serialize_result(
+                r, config, best_by_class[r.starter.klasse])
+            for r in results
+        ]
+
+    def _distance_km(self, result: BoatResult, config: RaceConfig) -> float:
+        """Gesamtdistanz eines Boots in Kilometern.
+
+        Formel (wie Excel-Spalte „Calc Strecke“):
+        ``Länge 1. Runde + (Runden - 1) × Länge Standardrunde``.
+
+        Args:
+            result: Ergebnis mit Rundenzahl.
+            config: Rennkonfiguration (Rundenlängen in Metern).
+
+        Returns:
+            Distanz in Kilometern (0.0 ohne gefahrene Runde).
+        """
+        if result.laps_count <= 0:
+            return 0.0
+        distance_m = (config.lap1_length_m
+                      + (result.laps_count - 1) * config.standard_lap_length_m)
+        return distance_m / 1000.0
+
+    def _avg_speed_kmh(self, result: BoatResult, distance_km: float) -> float | None:
+        """Durchschnittsgeschwindigkeit über die Gesamtdistanz in km/h.
+
+        Args:
+            result: Ergebnis mit Gesamtzeit.
+            distance_km: gefahrene Distanz in Kilometern.
+
+        Returns:
+            km/h (auf 1 Nachkommastelle gerundet) oder None, wenn Distanz
+            oder Zeit 0 sind.
+        """
+        seconds = result.total_time.total_seconds()
+        if distance_km <= 0 or seconds <= 0:
+            return None
+        return round(distance_km / (seconds / 3600.0), 1)
+
+    def _race_time(self, result: BoatResult, distance_km: float,
+                   best_distance_km: float) -> timedelta | None:
+        """Rennzeit bei gleicher Distanz wie die beste Strecke der Gruppe.
+
+        Formel (wie Excel-Spalte „Rennzeit“):
+        ``eigene Gesamtzeit ÷ eigene Distanz × beste Distanz``.
+
+        Args:
+            result: Ergebnis mit Gesamtzeit.
+            distance_km: eigene Distanz in Kilometern.
+            best_distance_km: weiteste Distanz der Klasse im Rennen.
+
+        Returns:
+            Hochgerechnete Rennzeit oder None, wenn keine Distanz vorliegt.
+        """
+        if distance_km <= 0 or best_distance_km <= 0:
+            return None
+        if result.total_time <= timedelta():
+            return None
+        return result.total_time * (best_distance_km / distance_km)
+
+    def _serialize_result(self, result: BoatResult, config: RaceConfig,
+                          best_distance_km: float = 0.0) -> dict:
+        """Serialisiert ein BoatResult-Objekt.
+
+        Neue Felder (Kundenwunsch 2026-11-09):
+            - ``distance``: Strecke in km (1. Runde + weitere Runden)
+            - ``avg_speed``: Durchschnittsgeschwindigkeit in km/h
+            - ``race_time``: Zeit auf die beste Strecke der Klasse umgerechnet
+            - ``penalties``: Platzhalter (Strafprozente, aktuell leer)
+            - ``points``: Platzhalter (Punkte, aktuell leer)
+        """
+        distance_km = self._distance_km(result, config)
+        race_time = self._race_time(result, distance_km, best_distance_km)
         return {
             "place": result.place,
             "boat_nr": result.starter.boat_number,
@@ -234,6 +328,13 @@ class JsonResultWriter:
             "laps": result.laps_count,
             "total_time": format_duration(result.total_time),
             "best_lap": format_duration(result.best_lap),
+            "distance": round(distance_km, 3),
+            "avg_speed": self._avg_speed_kmh(result, distance_km),
+            "race_time": format_duration(race_time),
+            # Platzhalter: Strafen und Punkte werden weiterhin außerhalb der
+            # App gepflegt (Kundenwunsch 2026-11-09: aktuell leere Spalten).
+            "penalties": None,
+            "points": None,
         }
 
     def _serialize_log_entry(self, event: RaceEvent) -> str:

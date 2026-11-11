@@ -181,6 +181,9 @@ class BoatState:
     starter: Starter                        # Stammdaten (Verweis auf Starter)
     laps: list[Lap] = field(default_factory=list)          # abgeschlossene Runden
     last_passage: datetime | None = None    # Zeitpunkt der letzten Passage
+    last_real_passage: datetime | None = None  # letzte echte Zielpassage (nur
+                                               # Hotkey; ohne +1-Korrektur) –
+                                               # Basis für die Rennende-Ampel
     lockout_until: datetime | None = None   # Sperrzeit-Ende (für GUI-Anzeige)
     finished_at: datetime | None = None     # Zieleinlauf-Zeitpunkt (manuell, 2026-09-03)
     place: int | None = None                # Platzierung (nach Wertung, siehe ResultCalculator)

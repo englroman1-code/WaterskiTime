@@ -1,0 +1,3 @@
+# Windows-Batchdateien brauchen CRLF – cmd.exe parst LF-only falsch.
+*.cmd text eol=crlf
+*.bat text eol=crlf
